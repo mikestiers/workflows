@@ -8,11 +8,53 @@ on:
         required: false
         type: string
         default: 'eastus'
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'Azure region for networking resources'
+        required: true
+        type: choice
+        default: 'eastus'
+        options:
+          - eastus
+          - westus
+          - centralus
+          - northeurope
+          - westeurope
 
 jobs:
+  prompt_for_region:
+    name: Select Region
+    runs-on: ubuntu-latest
+    # Use environment to allow for approval if needed
+    environment: 
+      name: networking-deployment
+    outputs:
+      region: ${{ steps.determine_region.outputs.region }}
+    
+    steps:
+      - name: Determine Region
+        id: determine_region
+        run: |
+          # First check if triggered from root workflow with input
+          if [ -n "${{ inputs.region }}" ]; then
+            echo "Using provided region: ${{ inputs.region }}"
+            echo "region=${{ inputs.region }}" >> $GITHUB_OUTPUT
+          else
+            # Default to eastus if no input
+            echo "No region specified. Using default: eastus"
+            echo "region=eastus" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Display Selected Region
+        run: |
+          echo "::notice::Selected Azure Region: ${{ steps.determine_region.outputs.region }}"
+          echo "To use a different region, you can cancel this workflow and restart with a different region choice."
+
   networking:
     name: Networking Setup
     runs-on: ubuntu-latest
+    needs: prompt_for_region
     
     steps:
       - name: Checkout code
@@ -21,4 +63,4 @@ jobs:
       - name: Hello World
         run: |
           echo "Hello from Networking workflow!"
-          echo "Using region: ${{ inputs.region }}"
+          echo "Using region: ${{ needs.prompt_for_region.outputs.region }}"
