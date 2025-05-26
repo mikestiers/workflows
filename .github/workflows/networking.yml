@@ -7,14 +7,12 @@ on:
         description: 'Azure region for networking resources'
         required: false
         type: string
-        default: 'eastus'
   workflow_dispatch:
     inputs:
       region:
         description: 'Azure region for networking resources'
         required: true
         type: choice
-        default: 'eastus'
         options:
           - eastus
           - westus
