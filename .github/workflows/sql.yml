@@ -1,0 +1,24 @@
+name: SQL Workflow
+
+on:
+  workflow_call:
+    inputs:
+      server_name:
+        description: 'SQL server name'
+        required: false
+        type: string
+        default: 'my-sql-server'
+
+jobs:
+  sql:
+    name: SQL Server Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Hello World
+        run: |
+          echo "Hello from SQL workflow!"
+          echo "Using SQL server: ${{ inputs.server_name }}"

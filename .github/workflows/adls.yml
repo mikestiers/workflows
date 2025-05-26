@@ -1,0 +1,24 @@
+name: ADLS Workflow
+
+on:
+  workflow_call:
+    inputs:
+      storage_account:
+        description: 'ADLS storage account name'
+        required: false
+        type: string
+        default: 'mystorage'
+
+jobs:
+  adls:
+    name: ADLS Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Hello World
+        run: |
+          echo "Hello from ADLS workflow!"
+          echo "Using storage account: ${{ inputs.storage_account }}"

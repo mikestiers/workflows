@@ -1,0 +1,24 @@
+name: Networking Workflow
+
+on:
+  workflow_call:
+    inputs:
+      region:
+        description: 'Azure region for networking resources'
+        required: false
+        type: string
+        default: 'eastus'
+
+jobs:
+  networking:
+    name: Networking Setup
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Hello World
+        run: |
+          echo "Hello from Networking workflow!"
+          echo "Using region: ${{ inputs.region }}"

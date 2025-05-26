@@ -1,0 +1,24 @@
+name: ADB Workflow
+
+on:
+  workflow_call:
+    inputs:
+      workspace_name:
+        description: 'Databricks workspace name'
+        required: false
+        type: string
+        default: 'my-databricks'
+
+jobs:
+  adb:
+    name: Azure Databricks Setup
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Hello World
+        run: |
+          echo "Hello from ADB workflow!"
+          echo "Using Databricks workspace: ${{ inputs.workspace_name }}"
