@@ -10,7 +10,6 @@ body:
       value: |
         ## Region Selection
         Please select the region where you want to deploy resources.
-
   - type: dropdown
     id: region
     attributes:
@@ -23,6 +22,21 @@ body:
         - North Europe
         - West Europe
         - Southeast Asia
+    validations:
+      required: true
+      
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Select the size for deployment (Note that size options 10-30 are valid for East US, and 40-60 are valid for West US)
+      options:
+        - 10
+        - 20
+        - 30
+        - 40
+        - 50
+        - 60
     validations:
       required: true
 

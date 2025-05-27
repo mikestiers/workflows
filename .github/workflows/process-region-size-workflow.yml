@@ -1,0 +1,88 @@
+name: Process Region and Size Selection
+
+on:
+  issues:
+    types: [opened, edited]
+
+# Add permissions to allow writing to issues
+permissions:
+  issues: write
+
+jobs:
+  process-selections:
+    runs-on: ubuntu-latest
+    # Only run this workflow for issues created from the deployment-region template
+    if: contains(github.event.issue.title, 'Deployment Request')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Extract Region and Size Selections
+        id: extract-selections
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body;
+            
+            // Extract the region selection from the issue body
+            const regionMatch = body.match(/### Region\s*\n\s*\n\s*([^\n]+)/);
+            if (!regionMatch) {
+              core.setFailed('Could not find region selection in issue');
+              return;
+            }
+            
+            const selectedRegion = regionMatch[1].trim();
+            console.log(`Selected Region: ${selectedRegion}`);
+            
+            // Extract the size selection from the issue body
+            const sizeMatch = body.match(/### Size\s*\n\s*\n\s*([^\n]+)/);
+            if (!sizeMatch) {
+              core.setFailed('Could not find size selection in issue');
+              return;
+            }
+            
+            const selectedSize = sizeMatch[1].trim();
+            console.log(`Selected Size: ${selectedSize}`);
+            
+            // Set outputs for use in later steps
+            core.setOutput('region', selectedRegion);
+            core.setOutput('size', selectedSize);
+      
+      - name: Validate Region and Size Combination
+        id: validate
+        run: |
+          REGION="${{ steps.extract-selections.outputs.region }}"
+          SIZE="${{ steps.extract-selections.outputs.size }}"
+          
+          # Validate region-size combinations
+          if [[ "$REGION" == "East US" && ("$SIZE" == "10" || "$SIZE" == "20" || "$SIZE" == "30") ]]; then
+            RESULT="Valid combination: region $REGION with size $SIZE"
+            echo "$RESULT"
+            echo "validation_result=$RESULT" >> $GITHUB_OUTPUT
+          elif [[ "$REGION" == "West US" && ("$SIZE" == "40" || "$SIZE" == "50" || "$SIZE" == "60") ]]; then
+            RESULT="Valid combination: region $REGION with size $SIZE"
+            echo "$RESULT"
+            echo "validation_result=$RESULT" >> $GITHUB_OUTPUT
+          else
+            RESULT="Invalid combination: region $REGION with size $SIZE. East US only supports sizes 10-30. West US only supports sizes 40-60."
+            echo "$RESULT"
+            echo "validation_result=$RESULT" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Issue with Result
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const validationResult = process.env.VALIDATION_RESULT;
+            const issueNumber = context.payload.issue.number;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `✅ Validation Result: ${validationResult}`
+            });
+        env:
+          VALIDATION_RESULT: ${{ steps.validate.outputs.validation_result }}
