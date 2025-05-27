@@ -1,0 +1,36 @@
+name: Deployment Region Request
+description: Use this template to specify a region for deployment
+title: "Deployment Request: "
+labels: ["deployment", "region-selection"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Region Selection
+        Please select the region where you want to deploy resources.
+
+  - type: dropdown
+    id: region
+    attributes:
+      label: Region
+      description: Select the region for deployment
+      options:
+        - East US
+        - West US
+        - Central US
+        - North Europe
+        - West Europe
+        - Southeast Asia
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Any additional details about this deployment request
+      placeholder: Enter any additional information here...
+    validations:
+      required: false
