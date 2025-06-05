@@ -1,20 +1,94 @@
 <!DOCTYPE html>
 <html>
-<head><title>Create Issue</title></head>
+<head>
+  <title>Create Issue</title>
+  <style>
+    .hidden { display: none; margin-top: 10px; }
+    label { display: block; margin-top: 10px; }
+  </style>
+</head>
 <body>
-  <h2>Submit a Bug</h2>
+  <h2>Submit an Issue</h2>
   <form id="issue-form">
-    <label>Title: <input type="text" id="title" required /></label><br>
-    <label>Description:<br><textarea id="body" required></textarea></label><br>
+    <label>
+      Issue Type:
+      <select id="issue-type" required>
+        <option value="">-- Select --</option>
+        <option value="bug">Bug</option>
+        <option value="feature">Feature Request</option>
+        <option value="question">Question</option>
+      </select>
+    </label>
+
+    <div id="bug-fields" class="hidden">
+      <label>
+        Severity:
+        <select id="severity">
+          <option value="low">Low</option>
+          <option value="moderate">Moderate</option>
+          <option value="critical">Critical</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="feature-fields" class="hidden">
+      <label>
+        Priority:
+        <select id="priority">
+          <option value="nice-to-have">Nice to have</option>
+          <option value="important">Important</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </label>
+    </div>
+
+    <label>
+      Title:
+      <input type="text" id="title" required />
+    </label>
+
+    <label>
+      Description:
+      <textarea id="body" required></textarea>
+    </label>
+
     <button type="submit">Submit Issue</button>
   </form>
 
   <script>
-    document.getElementById('issue-form').addEventListener('submit', function(e) {
+    const issueType = document.getElementById('issue-type');
+    const bugFields = document.getElementById('bug-fields');
+    const featureFields = document.getElementById('feature-fields');
+
+    issueType.addEventListener('change', function () {
+      const value = this.value;
+      bugFields.classList.add('hidden');
+      featureFields.classList.add('hidden');
+
+      if (value === 'bug') {
+        bugFields.classList.remove('hidden');
+      } else if (value === 'feature') {
+        featureFields.classList.remove('hidden');
+      }
+    });
+
+    document.getElementById('issue-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      const title = encodeURIComponent(document.getElementById('title').value);
-      const body = encodeURIComponent(document.getElementById('body').value);
-      const url = `https://github.com/mikestiers/workflows/issues/new?title=${title}&body=${body}`;
+
+      const type = issueType.value;
+      const title = document.getElementById('title').value;
+      const body = document.getElementById('body').value;
+
+      let extra = '';
+      if (type === 'bug') {
+        extra = `\n\n**Severity**: ${document.getElementById('severity').value}`;
+      } else if (type === 'feature') {
+        extra = `\n\n**Priority**: ${document.getElementById('priority').value}`;
+      }
+
+      const fullBody = `**Type**: ${type}\n\n${body}${extra}`;
+      const url = `https://github.com/mikestiers/workflows/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(fullBody)}`;
+
       window.open(url, '_blank');
     });
   </script>
