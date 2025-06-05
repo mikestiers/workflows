@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>Create Issue</title></head>
+<body>
+  <h2>Submit a Bug</h2>
+  <form id="issue-form">
+    <label>Title: <input type="text" id="title" required /></label><br>
+    <label>Description:<br><textarea id="body" required></textarea></label><br>
+    <button type="submit">Submit Issue</button>
+  </form>
+
+  <script>
+    document.getElementById('issue-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const title = encodeURIComponent(document.getElementById('title').value);
+      const body = encodeURIComponent(document.getElementById('body').value);
+      const url = `https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?title=${title}&body=${body}`;
+      window.open(url, '_blank');
+    });
+  </script>
+</body>
+</html>
