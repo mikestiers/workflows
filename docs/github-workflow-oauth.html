@@ -163,21 +163,12 @@
 </head>
 
 <body>
-  <h1>GitHub Workflow with OAuth Authentication</h1>
-    <div class="workflow-section">
+  <h1>GitHub Workflow with OAuth Authentication</h1>    <div class="workflow-section">
     <h2>Step 1: Authenticate with GitHub</h2>
-    <p>Before triggering a workflow, you need to authenticate with GitHub using the device flow.</p>
+    <p>Before triggering a workflow, you need to authenticate with GitHub.</p>
     <button id="auth-button" class="workflow-button auth-button">Authenticate with GitHub</button>
     <button id="logout-button" class="workflow-button" style="background-color: #607D8B; display: none; margin-top: 5px;">Log Out</button>
     <div id="auth-status"></div>
-    
-    <div id="device-code-container" class="device-code-container hidden">
-      <p>To authenticate, please go to:</p>
-      <a id="verification-url" class="verification-url" target="_blank" href="">GitHub Device Activation</a>
-      <p>And enter this code:</p>
-      <div id="device-code" class="device-code"></div>
-      <p>Waiting for authentication...</p>
-    </div>
   </div>
   
   <div class="workflow-section">
@@ -189,8 +180,15 @@
     <div id="workflow-logs" class="workflow-logs"></div>
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
+  <script>    document.addEventListener('DOMContentLoaded', function() {
+      // Check if we're returning from the OAuth flow
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      if (code && state) {
+        handleOAuthCallback();
+      }
+
       // GitHub repository details
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
@@ -199,26 +197,21 @@
       // NOTE: You need to register an OAuth App at https://github.com/settings/applications/new
       // and replace these values with your own
       const clientId = 'Ov23liXhJlhD3Xei3562'; // Replace with your GitHub OAuth App client ID
-      
-      // Instructions for getting a GitHub OAuth App Client ID:
+        // Instructions for getting a GitHub OAuth App Client ID:
       // 1. Go to https://github.com/settings/applications/new
       // 2. Application name: Enter a name (e.g., "Workflow Trigger App")
-      // 3. Homepage URL: Enter your website URL or http://localhost if testing locally
+      // 3. Homepage URL: Enter your website URL (e.g., https://mikestiers.github.io/workflows/)
       // 4. Application description: Optional description
-      // 5. Authorization callback URL: Not needed for Device Flow, can use your website URL
+      // 5. Authorization callback URL: Enter your full page URL (e.g., https://mikestiers.github.io/workflows/github-workflow-oauth.html)
       // 6. Click "Register application"
       // 7. Copy the generated "Client ID" and replace 'YOUR_GITHUB_CLIENT_ID' above
-      // 8. No client secret is needed for the Device Flow authentication
+      // 8. No client secret is needed for public GitHub Pages authentication
       
       // Authentication state
-      let accessToken = '';
-        // Cache DOM elements
+      let accessToken = '';      // Cache DOM elements
       const authButton = document.getElementById('auth-button');
       const logoutButton = document.getElementById('logout-button');
       const authStatus = document.getElementById('auth-status');
-      const deviceCodeContainer = document.getElementById('device-code-container');
-      const deviceCodeElement = document.getElementById('device-code');
-      const verificationUrlElement = document.getElementById('verification-url');
       
       const workflowButton = document.getElementById('workflow-trigger');
       const workflowStatus = document.getElementById('workflow-status');
@@ -256,8 +249,7 @@
       }
         /**
        * Start the GitHub OAuth Device Flow
-       */
-      function startAuthentication() {
+       */      function startAuthentication() {
         const button = authButton;
         const statusEl = authStatus;
         
@@ -278,24 +270,82 @@
         // Clear previous status
         statusEl.innerHTML = '';
         statusEl.className = '';
-        deviceCodeContainer.classList.add('hidden');
         
         // Update button state
         button.disabled = true;
-        button.textContent = 'Requesting Device Code...';
+        button.textContent = 'Redirecting to GitHub...';
         
         appendAuthMessage('Initiating GitHub authentication flow...', false);
-          // Request device code from GitHub using CORS-enabled endpoint
-        fetch('https://github.com/login/device/code', {
+        
+        // Generate a random state value to prevent CSRF attacks
+        const state = Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('github_oauth_state', state);
+        
+        // Store the current URL to redirect back after authentication
+        localStorage.setItem('github_oauth_redirect', window.location.href);
+        
+        // Redirect to GitHub OAuth authorization URL
+        const authUrl = new URL('https://github.com/login/oauth/authorize');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('scope', 'workflow');
+        authUrl.searchParams.append('state', state);
+        authUrl.searchParams.append('redirect_uri', window.location.href);
+        
+        window.location.href = authUrl.toString();
+      }
+      
+      /**
+       * Handle OAuth callback from GitHub
+       */
+      function handleOAuthCallback() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const savedState = localStorage.getItem('github_oauth_state');
+        
+        // Clean up the URL to remove the OAuth parameters
+        const cleanUrl = window.location.href.split('?')[0];
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        if (code && state && state === savedState) {
+          // Clear the state from localStorage
+          localStorage.removeItem('github_oauth_state');
+          
+          // Update UI
+          authButton.disabled = true;
+          authButton.textContent = 'Completing Authentication...';
+          appendAuthMessage('Received authorization code from GitHub, exchanging for token...', false);
+          
+          // We need to use a JSONP approach or a small proxy since we can't directly call the token endpoint due to CORS
+          // For simplicity, we'll create a hidden form and POST to our validate-oauth-client-id.html page which can exchange the code
+          exchangeCodeForToken(code);
+        }
+      }
+      
+      /**
+       * Exchange OAuth authorization code for an access token
+       */
+      function exchangeCodeForToken(code) {
+        const statusEl = authStatus;
+        
+        // For GitHub Pages, we need to use CORS Anywhere or a similar proxy
+        // Alternatively, we could set up a small Netlify/Vercel function
+        const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+        const tokenUrl = 'https://github.com/login/oauth/access_token';
+        
+        appendAuthMessage('Exchanging authorization code for access token...', false);
+        
+        fetch(proxyUrl + tokenUrl, {
           method: 'POST',
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
+            'X-Requested-With': 'XMLHttpRequest'
           },
           body: JSON.stringify({
             client_id: clientId,
-            scope: 'workflow' // Request workflow permission
+            code: code,
+            redirect_uri: window.location.href.split('?')[0]
           })
         })
         .then(response => {
@@ -305,97 +355,37 @@
           return response.json();
         })
         .then(data => {
-          // Show device code to the user
-          deviceCodeElement.textContent = data.user_code;
-          verificationUrlElement.href = data.verification_uri;
-          verificationUrlElement.textContent = data.verification_uri;
-          deviceCodeContainer.classList.remove('hidden');
+          if (data.error) {
+            throw new Error(data.error_description || data.error);
+          }
           
-          button.textContent = 'Waiting for Authentication...';
-          appendAuthMessage(`Please complete authentication within ${Math.floor(data.expires_in / 60)} minutes`, false);
-          
-          // Poll for token
-          pollForToken(data.device_code, data.interval);
+          if (data.access_token) {
+            // Authentication successful
+            accessToken = data.access_token;
+            localStorage.setItem('github_token', accessToken);
+            
+            authButton.disabled = false;
+            authButton.textContent = 'Re-Authenticate with GitHub';
+            logoutButton.style.display = 'block';
+            workflowButton.disabled = false;
+            
+            appendAuthMessage('Authentication successful! You can now trigger workflows.', false);
+            authStatus.className = 'status-success';
+            
+            // Verify token permissions
+            verifyTokenPermissions();
+          } else {
+            throw new Error('No access token received from GitHub');
+          }
         })
         .catch(error => {
-          console.error('Error starting authentication:', error);
-          button.disabled = false;
-          button.textContent = 'Authentication Failed - Try Again';
+          console.error('Error exchanging code for token:', error);
+          
+          authButton.disabled = false;
+          authButton.textContent = 'Authentication Failed - Try Again';
+          
           appendAuthMessage(`Error: ${error.message}`, true);
         });
-      }
-      
-      /**
-       * Poll GitHub for token after user authenticates
-       */
-      function pollForToken(deviceCode, interval) {
-        const statusEl = authStatus;
-        let attempts = 0;
-        const maxAttempts = 100; // Approximately 10 minutes with 6s interval
-          function checkToken() {
-          fetch('https://github.com/login/oauth/access_token', {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
-            },
-            body: JSON.stringify({
-              client_id: clientId,
-              device_code: deviceCode,
-              grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
-            })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.error) {
-              if (data.error === 'authorization_pending') {
-                // User hasn't authorized yet
-                if (attempts < maxAttempts) {
-                  attempts++;
-                  setTimeout(checkToken, interval * 1000);
-                } else {
-                  // Timed out
-                  authButton.disabled = false;
-                  authButton.textContent = 'Authentication Timed Out - Try Again';
-                  deviceCodeContainer.classList.add('hidden');
-                  appendAuthMessage('Authentication timed out. Please try again.', true);
-                }
-              } else {
-                // Other error
-                authButton.disabled = false;
-                authButton.textContent = 'Authentication Failed - Try Again';
-                deviceCodeContainer.classList.add('hidden');
-                appendAuthMessage(`Authentication error: ${data.error_description || data.error}`, true);
-              }
-            } else if (data.access_token) {              // Authentication successful
-              accessToken = data.access_token;
-              localStorage.setItem('github_token', accessToken);
-              
-              authButton.disabled = false;
-              authButton.textContent = 'Re-Authenticate with GitHub';
-              logoutButton.style.display = 'block';
-              workflowButton.disabled = false;
-              deviceCodeContainer.classList.add('hidden');
-              
-              appendAuthMessage('Authentication successful! You can now trigger workflows.', false);
-              statusEl.className = 'status-success';
-              
-              // Verify token permissions
-              verifyTokenPermissions();
-            }
-          })
-          .catch(error => {
-            console.error('Error polling for token:', error);
-            authButton.disabled = false;
-            authButton.textContent = 'Authentication Failed - Try Again';
-            deviceCodeContainer.classList.add('hidden');
-            appendAuthMessage(`Error: ${error.message}`, true);
-          });
-        }
-        
-        // Start polling
-        setTimeout(checkToken, interval * 1000);
       }
       
       /**
