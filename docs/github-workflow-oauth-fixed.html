@@ -133,29 +133,6 @@
       color: #90A4AE;
     }
     
-    .device-code-container {
-      margin: 20px 0;
-      padding: 15px;
-      background-color: #e3f2fd;
-      border-radius: 4px;
-      border-left: 4px solid #2196F3;
-    }
-    
-    .device-code {
-      font-family: monospace;
-      font-size: 24px;
-      font-weight: bold;
-      text-align: center;
-      margin: 10px 0;
-      letter-spacing: 3px;
-    }
-    
-    .verification-url {
-      display: block;
-      margin: 10px 0;
-      text-align: center;
-    }
-    
     .hidden {
       display: none;
     }
@@ -163,7 +140,8 @@
 </head>
 
 <body>
-  <h1>GitHub Workflow with OAuth Authentication</h1>    <div class="workflow-section">
+  <h1>GitHub Workflow with OAuth Authentication</h1>
+  <div class="workflow-section">
     <h2>Step 1: Authenticate with GitHub</h2>
     <p>Before triggering a workflow, you need to authenticate with GitHub.</p>
     <button id="auth-button" class="workflow-button auth-button">Authenticate with GitHub</button>
@@ -180,16 +158,19 @@
     <div id="workflow-logs" class="workflow-logs"></div>
   </div>
 
-  <script>    document.addEventListener('DOMContentLoaded', function() {
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
       // GitHub repository details
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
       const workflowId = 'root.yml';
-        // GitHub OAuth App details
+      
+      // GitHub OAuth App details
       // NOTE: You need to register an OAuth App at https://github.com/settings/applications/new
       // and replace these values with your own
       const clientId = 'Ov23liXhJlhD3Xei3562'; // Replace with your GitHub OAuth App client ID
-        // Instructions for getting a GitHub OAuth App Client ID:
+      
+      // Instructions for getting a GitHub OAuth App Client ID:
       // 1. Go to https://github.com/settings/applications/new
       // 2. Application name: Enter a name (e.g., "Workflow Trigger App")
       // 3. Homepage URL: Enter your website URL (e.g., https://mikestiers.github.io/workflows/)
@@ -200,7 +181,9 @@
       // 8. No client secret is needed for public GitHub Pages authentication
       
       // Authentication state
-      let accessToken = '';      // Cache DOM elements
+      let accessToken = '';
+      
+      // Cache DOM elements
       const authButton = document.getElementById('auth-button');
       const logoutButton = document.getElementById('logout-button');
       const authStatus = document.getElementById('auth-status');
@@ -216,20 +199,20 @@
         logoutButton.style.display = 'block';
         workflowButton.disabled = false;
         appendAuthMessage('Authentication restored from previous session', false);
-      }      // Add event listeners
+      }
+      
+      // Add event listeners
       authButton.addEventListener('click', startAuthentication);
       logoutButton.addEventListener('click', logOut);
       workflowButton.addEventListener('click', triggerWorkflow);
       
-      // After initializing all DOM elements, check if we're returning from the OAuth flow
-      setTimeout(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const state = urlParams.get('state');
-        if (code && state) {
-          handleOAuthCallback();
-        }
-      }, 100);
+      // Check if we're returning from the OAuth flow
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      if (code && state) {
+        handleOAuthCallback();
+      }
       
       /**
        * Log out by removing the stored token
@@ -246,9 +229,12 @@
         // Clear status
         authStatus.innerHTML = '';
         appendAuthMessage('Logged out successfully', false);
-      }      /**
+      }
+      
+      /**
        * Start the GitHub OAuth Web Flow
-       */function startAuthentication() {
+       */
+      function startAuthentication() {
         const button = authButton;
         const statusEl = authStatus;
         
@@ -292,7 +278,8 @@
         
         window.location.href = authUrl.toString();
       }
-        /**
+      
+      /**
        * Handle OAuth callback from GitHub
        */
       function handleOAuthCallback() {
@@ -318,7 +305,9 @@
           // Instead, we'll guide users to create a personal access token
           createManualTokenInput();
         }
-      }/**
+      }
+      
+      /**
        * Create a UI for manual token input as a workaround for CORS limitations
        */
       function createManualTokenInput() {
@@ -358,7 +347,8 @@
         tokenInputContainer.appendChild(tokenInput);
         tokenInputContainer.appendChild(submitButton);
         statusEl.appendChild(tokenInputContainer);
-          // Handle token submission
+        
+        // Handle token submission
         submitButton.addEventListener('click', function() {
           const token = tokenInput.value.trim();
           
@@ -387,66 +377,26 @@
           verifyTokenPermissions();
         });
       }
-        /**
+      
+      /**
        * Verify that the token has the required permissions
        */
       function verifyTokenPermissions() {
-        // First check if the token is valid by getting user info
         fetch('https://api.github.com/user', {
           headers: {
             'Accept': 'application/vnd.github.v3+json',
             'Authorization': `token ${accessToken}`
           }
         })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`Authentication failed: ${response.status}`);
-          }
-          return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
           if (data.login) {
             appendAuthMessage(`Authenticated as: ${data.login}`, false);
-            
-            // Now check if we can access the workflow endpoint
-            return fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows`, {
-              headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                'Authorization': `token ${accessToken}`
-              }
-            });
-          } else {
-            throw new Error('Could not retrieve user information');
           }
-        })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 403) {
-              throw new Error('Your token does not have the workflow permission. Please create a new token with the "workflow" scope.');
-            }
-            throw new Error(`Failed to access workflows: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          appendAuthMessage('Token verified with workflow access permissions.', false);
         })
         .catch(error => {
           console.error('Error verifying token:', error);
-          appendAuthMessage(`Error: ${error.message}`, true);
-          
-          // Reset authentication state on error
-          accessToken = '';
-          localStorage.removeItem('github_token');
-          
-          // Update UI to allow re-authentication
-          authButton.disabled = false;
-          authButton.textContent = 'Authenticate with GitHub';
-          logoutButton.style.display = 'none';
-          workflowButton.disabled = true;
-          
-          // Offer to create a new token
-          createManualTokenInput();
+          appendAuthMessage('Warning: Could not verify token permissions', true);
         });
       }
       
