@@ -181,14 +181,6 @@
   </div>
 
   <script>    document.addEventListener('DOMContentLoaded', function() {
-      // Check if we're returning from the OAuth flow
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      const state = urlParams.get('state');
-      if (code && state) {
-        handleOAuthCallback();
-      }
-
       // GitHub repository details
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
@@ -225,11 +217,18 @@
         workflowButton.disabled = false;
         appendAuthMessage('Authentication restored from previous session', false);
       }
-      
-      // Add event listeners
+        // Add event listeners
       authButton.addEventListener('click', startAuthentication);
       logoutButton.addEventListener('click', logOut);
       workflowButton.addEventListener('click', triggerWorkflow);
+      
+      // Check if we're returning from the OAuth flow
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      if (code && state) {
+        handleOAuthCallback();
+      }
       
       /**
        * Log out by removing the stored token
@@ -246,10 +245,9 @@
         // Clear status
         authStatus.innerHTML = '';
         appendAuthMessage('Logged out successfully', false);
-      }
-        /**
-       * Start the GitHub OAuth Device Flow
-       */      function startAuthentication() {
+      }      /**
+       * Start the GitHub OAuth Web Flow
+       */function startAuthentication() {
         const button = authButton;
         const statusEl = authStatus;
         
@@ -327,13 +325,13 @@
        */
       function exchangeCodeForToken(code) {
         const statusEl = authStatus;
-        
-        // For GitHub Pages, we need to use CORS Anywhere or a similar proxy
+          // For GitHub Pages, we need to use CORS Anywhere or a similar proxy
         // Alternatively, we could set up a small Netlify/Vercel function
         const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
         const tokenUrl = 'https://github.com/login/oauth/access_token';
         
-        appendAuthMessage('Exchanging authorization code for access token...', false);
+        appendAuthMessage('Exchanging authorization code for access token via CORS proxy...', false);
+        appendAuthMessage('Note: You may need to temporarily authorize the CORS Anywhere service by visiting https://cors-anywhere.herokuapp.com/corsdemo', false);
         
         fetch(proxyUrl + tokenUrl, {
           method: 'POST',
