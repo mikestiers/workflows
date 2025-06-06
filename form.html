@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Dynamic Form from Schema</title>
+    <style>
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        input:invalid {
+            border: 2px solid red;
+        }
+
+        input:valid {
+            border: 1px solid green;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 5px 10px;
+        }
+
+        .error-message {
+            color: red;
+            font-size: 0.8em;
+            margin-top: 2px;
+            display: none;
+        }
+
+        input:invalid+.error-message {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Dynamic Form</h2>
+    <form id="dynamicForm"></form>
+
+    <!-- External JavaScript file -->
+    <script src="form.js"></script>
+</body>
+
+</html>
