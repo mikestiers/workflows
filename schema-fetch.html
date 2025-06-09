@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Workflow Form</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], 
+        textarea {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input[type="checkbox"] {
+            width: auto;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .step-container {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .steps-container {
+            margin-top: 20px;
+        }
+        .add-step-btn {
+            margin: 10px 0;
+        }
+        .error {
+            color: red;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Workflow Form</h1>
+        <div id="loading">Loading schema...</div>
+        <div id="error" class="error"></div>
+        <form id="workflowForm" style="display: none;">
+            <!-- Form will be dynamically generated here -->
+            <button type="submit">Submit Workflow</button>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const form = document.getElementById('workflowForm');
+            const loadingElement = document.getElementById('loading');
+            const errorElement = document.getElementById('error');
+            
+            try {
+                // Fetch the schema.json file
+                const response = await fetch('schema.json');
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch schema: ${response.statusText}`);
+                }
+                
+                const schema = await response.json();
+                
+                // Hide loading message
+                loadingElement.style.display = 'none';
+                
+                // Show form
+                form.style.display = 'block';
+                
+                // Generate form fields based on schema
+                generateForm(schema, form);
+                
+                // Add form submission handler
+                form.addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    submitForm();
+                });
+                
+            } catch (error) {
+                loadingElement.style.display = 'none';
+                errorElement.textContent = `Error: ${error.message}`;
+                console.error(error);
+            }
+        });
+
+        function generateForm(schema, formElement) {
+            const title = document.createElement('h2');
+            title.textContent = schema.title;
+            formElement.prepend(title);
+            
+            const properties = schema.properties;
+            
+            // Add base fields (id, name)
+            addField('id', properties.id, formElement, true);
+            addField('name', properties.name, formElement, true);
+            
+            // Add enabled field (boolean)
+            addField('enabled', properties.enabled, formElement, false);
+            
+            // Add steps section
+            addStepsSection(properties.steps, formElement);
+        }
+        
+        function addField(name, schema, parent, required) {
+            const formGroup = document.createElement('div');
+            formGroup.className = 'form-group';
+            
+            const label = document.createElement('label');
+            label.setAttribute('for', name);
+            label.textContent = `${capitalizeFirstLetter(name)}${required ? ' *' : ''}`;
+            
+            let input;
+            
+            switch (schema?.type) {
+                case 'boolean':
+                    input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.id = name;
+                    input.name = name;
+                    if (schema.default) {
+                        input.checked = schema.default;
+                    }
+                    break;
+                    
+                default:
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.id = name;
+                    input.name = name;
+                    if (required) {
+                        input.required = true;
+                    }
+                    if (schema?.description) {
+                        input.placeholder = schema.description;
+                    }
+            }
+            
+            formGroup.appendChild(label);
+            formGroup.appendChild(input);
+            
+            if (schema?.description && schema.type !== 'boolean') {
+                const description = document.createElement('div');
+                description.className = 'description';
+                description.textContent = schema.description;
+                description.style.fontSize = '0.8em';
+                description.style.color = '#666';
+                formGroup.appendChild(description);
+            }
+            
+            parent.appendChild(formGroup);
+        }
+
+        function addStepsSection(stepsSchema, formElement) {
+            const stepsContainer = document.createElement('div');
+            stepsContainer.className = 'steps-container';
+            
+            const stepsHeader = document.createElement('h3');
+            stepsHeader.textContent = 'Workflow Steps';
+            stepsContainer.appendChild(stepsHeader);
+            
+            const stepsDescription = document.createElement('p');
+            stepsDescription.textContent = stepsSchema.description;
+            stepsContainer.appendChild(stepsDescription);
+            
+            // Container for dynamic steps
+            const stepsList = document.createElement('div');
+            stepsList.id = 'steps-list';
+            stepsContainer.appendChild(stepsList);
+            
+            // Add button to add more steps
+            const addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.className = 'add-step-btn';
+            addButton.textContent = 'Add Step';
+            addButton.onclick = function() {
+                addStepForm(stepsList, stepsSchema.items);
+            };
+            
+            stepsContainer.appendChild(addButton);
+            formElement.appendChild(stepsContainer);
+            
+            // Add initial step
+            addStepForm(stepsList, stepsSchema.items);
+        }
+
+        function addStepForm(parent, stepSchema) {
+            const stepCount = parent.children.length + 1;
+            
+            const stepContainer = document.createElement('div');
+            stepContainer.className = 'step-container';
+            
+            const stepHeader = document.createElement('h4');
+            stepHeader.textContent = `Step ${stepCount}`;
+            stepContainer.appendChild(stepHeader);
+            
+            // Add required fields
+            addField(`steps[${stepCount-1}].stepId`, { type: 'string' }, stepContainer, true);
+            addField(`steps[${stepCount-1}].action`, { type: 'string' }, stepContainer, true);
+            
+            // Add parameters field (free-form object)
+            const paramsGroup = document.createElement('div');
+            paramsGroup.className = 'form-group';
+            
+            const paramsLabel = document.createElement('label');
+            paramsLabel.setAttribute('for', `steps[${stepCount-1}].parameters`);
+            paramsLabel.textContent = 'Parameters (JSON)';
+            
+            const paramsInput = document.createElement('textarea');
+            paramsInput.id = `steps[${stepCount-1}].parameters`;
+            paramsInput.name = `steps[${stepCount-1}].parameters`;
+            paramsInput.rows = 4;
+            paramsInput.style.width = '100%';
+            paramsInput.placeholder = '{"key": "value"}';
+            
+            paramsGroup.appendChild(paramsLabel);
+            paramsGroup.appendChild(paramsInput);
+            stepContainer.appendChild(paramsGroup);
+            
+            // Add remove button
+            if (stepCount > 1) {
+                const removeButton = document.createElement('button');
+                removeButton.type = 'button';
+                removeButton.textContent = 'Remove Step';
+                removeButton.style.backgroundColor = '#f44336';
+                removeButton.onclick = function() {
+                    parent.removeChild(stepContainer);
+                    // Renumber steps
+                    updateStepNumbers(parent);
+                };
+                stepContainer.appendChild(removeButton);
+            }
+            
+            parent.appendChild(stepContainer);
+        }
+
+        function updateStepNumbers(stepsContainer) {
+            const steps = stepsContainer.querySelectorAll('.step-container');
+            steps.forEach((step, index) => {
+                // Update header
+                step.querySelector('h4').textContent = `Step ${index + 1}`;
+                
+                // Update field names and IDs
+                const inputs = step.querySelectorAll('input, textarea');
+                inputs.forEach(input => {
+                    const fieldName = input.name.split('.').pop();
+                    input.name = `steps[${index}].${fieldName}`;
+                    input.id = `steps[${index}].${fieldName}`;
+                });
+                
+                // Update labels
+                const labels = step.querySelectorAll('label');
+                labels.forEach(label => {
+                    const forAttr = label.getAttribute('for');
+                    if (forAttr) {
+                        const fieldName = forAttr.split('.').pop();
+                        label.setAttribute('for', `steps[${index}].${fieldName}`);
+                    }
+                });
+            });
+        }
+
+        function submitForm() {
+            const form = document.getElementById('workflowForm');
+            const formData = new FormData(form);
+            const result = {
+                id: formData.get('id'),
+                name: formData.get('name'),
+                enabled: formData.get('enabled') === 'on',
+                steps: []
+            };
+            
+            // Find all steps
+            const stepIdPattern = /^steps\[(\d+)\]\.stepId$/;
+            for (const [key, value] of formData.entries()) {
+                const match = key.match(stepIdPattern);
+                if (match) {
+                    const index = parseInt(match[1]);
+                    if (!result.steps[index]) {
+                        result.steps[index] = {};
+                    }
+                    result.steps[index].stepId = value;
+                }
+            }
+            
+            // Fill in step data
+            const actionPattern = /^steps\[(\d+)\]\.action$/;
+            const paramsPattern = /^steps\[(\d+)\]\.parameters$/;
+            
+            for (const [key, value] of formData.entries()) {
+                let match = key.match(actionPattern);
+                if (match) {
+                    const index = parseInt(match[1]);
+                    result.steps[index].action = value;
+                    continue;
+                }
+                
+                match = key.match(paramsPattern);
+                if (match) {
+                    const index = parseInt(match[1]);
+                    try {
+                        result.steps[index].parameters = value ? JSON.parse(value) : {};
+                    } catch (e) {
+                        alert(`Invalid JSON in parameters for Step ${index + 1}`);
+                        return;
+                    }
+                }
+            }
+            
+            console.log('Form submission result:', result);
+            alert('Form submitted successfully! See console for details.');
+            
+            // Here you would typically send the data to a server
+            // fetch('/api/workflows', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify(result)
+            // });
+        }
+
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+    </script>
+</body>
+</html>
