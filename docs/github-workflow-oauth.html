@@ -312,63 +312,52 @@
           // Update UI
           authButton.disabled = true;
           authButton.textContent = 'Completing Authentication...';
-          appendAuthMessage('Received authorization code from GitHub, exchanging for token...', false);
-          
-          // Skip the token exchange with GitHub's API due to CORS limitations
-          // Instead, we'll guide users to create a personal access token
-          createManualTokenInput();
+          appendAuthMessage('Received authorization code from GitHub, exchanging for token...', false);          // Exchange the authorization code for an access token
+          exchangeCodeForToken(code);
+        } else {
+          appendAuthMessage('Invalid OAuth callback - state mismatch or missing parameters', true);
+          authButton.disabled = false;
+          authButton.textContent = 'Authenticate with GitHub';
         }
-      }/**
-       * Create a UI for manual token input as a workaround for CORS limitations
+      }
+
+      /**
+       * Exchange the authorization code for an access token
        */
-      function createManualTokenInput() {
-        const statusEl = authStatus;
-        
-        appendAuthMessage('Due to GitHub Pages CORS limitations, we need to use an alternative approach:', false);
-        appendAuthMessage('1. We\'ll open GitHub\'s personal access token page', false);
-        appendAuthMessage('2. Create a token with "workflow" scope', false);
-        appendAuthMessage('3. Copy the token and paste it below', false);
-        
-        // Create token input UI
-        const tokenInputContainer = document.createElement('div');
-        tokenInputContainer.style.marginTop = '15px';
-        
-        const tokenInput = document.createElement('input');
-        tokenInput.type = 'text';
-        tokenInput.placeholder = 'Paste your GitHub token here';
-        tokenInput.style.width = '100%';
-        tokenInput.style.padding = '8px';
-        tokenInput.style.marginBottom = '10px';
-        
-        const submitButton = document.createElement('button');
-        submitButton.textContent = 'Use Token';
-        submitButton.className = 'workflow-button';
-        submitButton.style.backgroundColor = '#2196F3';
-        submitButton.style.margin = '0';
-        
-        // Open GitHub token page
-        const tokenLink = document.createElement('a');
-        tokenLink.href = 'https://github.com/settings/tokens/new?scopes=workflow&description=Workflow%20Trigger%20App';
-        tokenLink.target = '_blank';
-        tokenLink.textContent = 'Click here to create a GitHub token';
-        tokenLink.style.display = 'block';
-        tokenLink.style.marginBottom = '15px';
-        
-        tokenInputContainer.appendChild(tokenLink);
-        tokenInputContainer.appendChild(tokenInput);
-        tokenInputContainer.appendChild(submitButton);
-        statusEl.appendChild(tokenInputContainer);
-          // Handle token submission
-        submitButton.addEventListener('click', function() {
-          const token = tokenInput.value.trim();
+      async function exchangeCodeForToken(code) {
+        try {
+          appendAuthMessage('Requesting access token from GitHub...', false);
           
-          if (!token) {
-            appendAuthMessage('Please enter a valid GitHub token', true);
-            return;
+          // Exchange the code for an access token
+          const response = await fetch('https://github.com/login/oauth/access_token', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              client_id: clientId,
+              code: code,
+              redirect_uri: window.location.href.split('?')[0]
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Token exchange failed: ${response.status}`);
           }
           
-          // Use the provided token
-          accessToken = token;
+          const data = await response.json();
+          
+          if (data.error) {
+            throw new Error(`GitHub OAuth error: ${data.error_description || data.error}`);
+          }
+          
+          if (!data.access_token) {
+            throw new Error('No access token received from GitHub');
+          }
+          
+          // Store the access token
+          accessToken = data.access_token;
           localStorage.setItem('github_token', accessToken);
           
           // Update UI
@@ -377,15 +366,19 @@
           logoutButton.style.display = 'block';
           workflowButton.disabled = false;
           
-          // Remove token input UI
-          statusEl.removeChild(tokenInputContainer);
-          
           appendAuthMessage('Authentication successful! You can now trigger workflows.', false);
           authStatus.className = 'status-success';
           
           // Verify token permissions
           verifyTokenPermissions();
-        });
+            } catch (error) {
+          console.error('Error exchanging code for token:', error);
+          appendAuthMessage(`Authentication failed: ${error.message}`, true);
+          appendAuthMessage('Please try authenticating again.', false);
+          
+          // Reset UI
+          authButton.disabled = false;
+          authButton.textContent = 'Authenticate with GitHub';        }
       }
         /**
        * Verify that the token has the required permissions
@@ -430,10 +423,10 @@
         })
         .then(data => {
           appendAuthMessage('Token verified with workflow access permissions.', false);
-        })
-        .catch(error => {
+        })        .catch(error => {
           console.error('Error verifying token:', error);
           appendAuthMessage(`Error: ${error.message}`, true);
+          appendAuthMessage('Please try authenticating again with a new token.', false);
           
           // Reset authentication state on error
           accessToken = '';
@@ -444,9 +437,6 @@
           authButton.textContent = 'Authenticate with GitHub';
           logoutButton.style.display = 'none';
           workflowButton.disabled = true;
-          
-          // Offer to create a new token
-          createManualTokenInput();
         });
       }
       
