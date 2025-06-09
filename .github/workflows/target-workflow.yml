@@ -1,0 +1,21 @@
+name: Target Workflow
+on:
+  workflow_dispatch:
+    # This workflow is triggered by the oauth-handler.yml workflow
+
+jobs:
+  run-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Run authenticated task
+        run: |
+          echo "Running task with authenticated user permissions"
+          echo "This workflow was triggered by the OAuth flow"
+          
+      # Add your actual task steps here
+      # For example:
+      # - name: Your action
+      #   uses: some/action@v1
