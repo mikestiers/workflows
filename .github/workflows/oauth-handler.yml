@@ -1,0 +1,43 @@
+name: OAuth Handler
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: 'OAuth code from client'
+        required: true
+
+jobs:
+  exchange-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exchange code for token
+        id: get-token
+        uses: actions/github-script@v6
+        env:
+          CODE: ${{ github.event.inputs.code }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        with:
+          script: |
+            const { data } = await github.rest.oauth.createAccessToken({
+              client_id: process.env.CLIENT_ID,
+              client_secret: process.env.CLIENT_SECRET,
+              code: process.env.CODE
+            });
+            return data.access_token;
+
+      - name: Trigger Target Workflow
+        uses: actions/github-script@v6
+        env:
+          TOKEN: ${{ steps.get-token.outputs.result }}
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'target-workflow.yml',
+              ref: 'main',
+              headers: {
+                authorization: `Bearer ${process.env.TOKEN}`
+              }
+            });
