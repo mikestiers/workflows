@@ -22,7 +22,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Get Azure Resource Groups
-        id: get-rgs
+        id: get-rgs        
         shell: bash
         run: |
           echo "🔍 Getting Azure resource groups..."
@@ -30,14 +30,14 @@ jobs:
           # Get resource groups with only name and location using Azure CLI query
           RESOURCE_GROUPS_JSON=$(az group list --query "[].{name:name,location:location}" --output json 2>/dev/null || echo "[]")
           
-          # Check if we have any resource groups
-          RG_COUNT=$(echo "$RESOURCE_GROUPS_JSON" | jq --color-output false 'length')
+          # Get count of resource groups directly from Azure CLI
+          RG_COUNT=$(az group list --query "length(@)" --output tsv 2>/dev/null || echo "0")
           
           echo "📊 Found $RG_COUNT resource group(s)"
           
           # Output filtered JSON format
           echo "📋 Resource Groups (name and location only):"
-          echo "$RESOURCE_GROUPS_JSON" | jq --color-output false '.'
+          echo "$RESOURCE_GROUPS_JSON"
           
           # Set outputs for use in other jobs or API queries
           echo "resource-group-count=$RG_COUNT" >> $GITHUB_OUTPUT
@@ -46,8 +46,5 @@ jobs:
           echo "## 📊 Azure Resource Groups" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          echo "$RESOURCE_GROUPS_JSON" | jq --color-output false '.' >> $GITHUB_STEP_SUMMARY
+          echo "$RESOURCE_GROUPS_JSON" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          
-          # Clean up temporary file
-          rm -f temp_rgs.json
