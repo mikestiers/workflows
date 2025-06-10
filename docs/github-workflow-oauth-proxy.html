@@ -152,14 +152,7 @@
   </style>
 </head>
 
-<body>
-  <h1>GitHub Workflow with OAuth Proxy</h1>
-    <div class="proxy-info">
-    <h3>🔧 Setup Instructions</h3>
-    <p><strong>Step 1:</strong> Make sure the Python proxy server is running</p>
-    <p><strong>Step 2:</strong> Configure your GitHub OAuth App with callback URL: <code>https://github-oauth-proxy-2025.azurewebsites.net/oauth/callback</code></p>
-    <p><strong>Step 3:</strong> Set your GitHub Client Secret in the proxy server</p>
-  </div>
+<body>  <h1>GitHub Workflow with OAuth Proxy</h1>
 
   <div class="workflow-section">
     <h2>Step 1: Authenticate with GitHub</h2>
@@ -168,25 +161,34 @@
     <button id="logout-button" class="workflow-button" style="background-color: #607D8B; display: none; margin-top: 5px;">Log Out</button>
     <div id="auth-status"></div>
   </div>
-  
-  <div class="workflow-section">
-    <h2>Step 2: Trigger the Workflow</h2>
-    <p>After authenticating, you can trigger the GitHub workflow at <a href="https://github.com/mikestiers/workflows/actions/workflows/root.yml" target="_blank">mikestiers/workflows/actions/workflows/root.yml</a></p>
+    <div class="workflow-section">
+    <h2>Step 2: Trigger the Azure Subscriptions Workflow</h2>
+    <p>After authenticating, you can trigger the GitHub workflow at <a href="https://github.com/mikestiers/workflows/actions/workflows/GetSubscriptions.yml" target="_blank">mikestiers/workflows/actions/workflows/GetSubscriptions.yml</a></p>
     
-    <button id="workflow-trigger" class="workflow-button" disabled>Trigger Workflow</button>
-    <div id="workflow-status"></div>
+    <button id="workflow-trigger" class="workflow-button" disabled>Get Azure Subscriptions</button>    <div id="workflow-status"></div>
     <div id="workflow-logs" class="workflow-logs"></div>
+  </div>
+
+  <div class="workflow-section" id="subscription-results" style="display: none;">
+    <h2>📋 Azure Subscription Results</h2>
+    <div id="subscription-count"></div>
+    <div id="subscription-list"></div>
+    <div id="subscription-data" style="margin-top: 15px;">
+      <details>
+        <summary style="cursor: pointer; font-weight: bold;">View Raw JSON Data</summary>
+        <pre id="subscription-json" style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;"></pre>
+      </details>
+    </div>
   </div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       // Configuration
       const PROXY_BASE_URL = 'https://github-oauth-proxy-2025.azurewebsites.net';
-      
-      // GitHub repository details
+        // GitHub repository details
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
-      const workflowId = 'root.yml';
+      const workflowId = 'GetSubscriptions.yml';
         // Authentication state
       let accessToken = '';
       let authenticationInProgress = false;
@@ -570,8 +572,7 @@
           workflowStatus.appendChild(linkContainer);
         }
       }
-      
-      /**
+        /**
        * Poll for workflow completion via proxy
        */
       function pollWorkflowStatus(runId) {
@@ -583,7 +584,7 @@
           appendLog('Please check GitHub Actions directly for workflow status');
           
           workflowButton.classList.remove('running');
-          workflowButton.textContent = 'Trigger Workflow';
+          workflowButton.textContent = 'Get Azure Subscriptions';
           
           workflowStatus.classList.remove('status-running');
           return;
@@ -614,8 +615,7 @@
             if (status === 'completed') {
               // Workflow has finished
               const success = conclusion === 'success';
-              
-              if (success) {
+                if (success) {
                 // Update to success state
                 appendLog('Workflow completed successfully!');
                 
@@ -630,10 +630,12 @@
                 statusText.textContent = 'Workflow completed successfully!';
                 workflowStatus.appendChild(statusText);
                 
-                // Reset button after 5 seconds
+                // Fetch and display subscription data
+                fetchSubscriptionResults(runId);
+                  // Reset button after 5 seconds
                 setTimeout(function() {
                   workflowButton.classList.remove('success');
-                  workflowButton.textContent = 'Trigger Workflow';
+                  workflowButton.textContent = 'Get Azure Subscriptions';
                 }, 5000);
               } else {
                 // Update to failure state
@@ -645,40 +647,37 @@
                 
                 workflowStatus.classList.remove('status-running');
                 workflowStatus.classList.add('status-failed');
-                
-                const statusText = document.createElement('div');
+                  const statusText = document.createElement('div');
                 statusText.textContent = `Workflow failed with conclusion: ${conclusion}`;
                 workflowStatus.appendChild(statusText);
                 
                 // Reset button after 5 seconds
                 setTimeout(function() {
                   workflowButton.classList.remove('failed');
-                  workflowButton.textContent = 'Trigger Workflow';
+                  workflowButton.textContent = 'Get Azure Subscriptions';
                 }, 5000);
               }
               
               // Workflow is complete, no need to poll again
-              return;
-            } else if (pollCount >= maxPolls) {
+              return;            } else if (pollCount >= maxPolls) {
               // We've polled too many times, stop polling
               appendLog('Exceeded maximum polling attempts. Please check GitHub directly for status.', true);
               
               // Reset button
               workflowButton.classList.remove('running');
-              workflowButton.textContent = 'Trigger Workflow';
+              workflowButton.textContent = 'Get Azure Subscriptions';
               return;
             }
             
             // Continue polling
             pollCount++;
             setTimeout(checkStatus, 2000); // Poll every 2 seconds
-          })
-          .catch(error => {
+          })          .catch(error => {
             appendLog(`Error checking workflow status: ${error.message}`, true);
             
             // On error, stop polling and reset the button
             workflowButton.classList.remove('running');
-            workflowButton.textContent = 'Trigger Workflow';
+            workflowButton.textContent = 'Get Azure Subscriptions';
           });
         }
         
@@ -703,11 +702,10 @@
         statusText.textContent = `Failed to trigger workflow: ${errorMessage}`;
         workflowStatus.innerHTML = '';
         workflowStatus.appendChild(statusText);
-        
-        // Reset button after 5 seconds
+          // Reset button after 5 seconds
         setTimeout(function() {
           workflowButton.classList.remove('failed');
-          workflowButton.textContent = 'Trigger Workflow';
+          workflowButton.textContent = 'Get Azure Subscriptions';
           workflowStatus.classList.remove('status-failed');
           workflowStatus.innerHTML = '';
         }, 5000);
@@ -760,6 +758,233 @@
         
         workflowLogs.appendChild(logEntry);
         workflowLogs.scrollTop = workflowLogs.scrollHeight;
+      }
+      
+      /**
+       * Fetch subscription results from the completed workflow
+       */
+      async function fetchSubscriptionResults(runId) {
+        try {
+          appendLog('🔍 Fetching subscription results from workflow...');
+          
+          // Get job details to access outputs
+          const jobsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/jobs`, {
+            headers: {
+              'Authorization': `token ${accessToken}`
+            }
+          });
+          
+          if (!jobsResponse.ok) {
+            throw new Error(`Failed to fetch job details: ${jobsResponse.status}`);
+          }
+          
+          const jobsData = await jobsResponse.json();
+          appendLog(`📋 Found ${jobsData.jobs.length} job(s)`);
+          
+          // Find the get-subscriptions job
+          const subscriptionJob = jobsData.jobs.find(job => job.name === 'Get Azure Subscriptions');
+          
+          if (!subscriptionJob) {
+            appendLog('⚠️ Could not find subscription job in workflow run', true);
+            return;
+          }
+          
+          appendLog(`✅ Found subscription job with status: ${subscriptionJob.status}`);
+          
+          // Get workflow run details to access outputs
+          const runResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
+            headers: {
+              'Authorization': `token ${accessToken}`
+            }
+          });
+          
+          if (!runResponse.ok) {
+            throw new Error(`Failed to fetch run details: ${runResponse.status}`);
+          }
+          
+          const runData = await runResponse.json();
+          
+          // Try to get artifacts which contain the subscription data
+          const artifactsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/artifacts`, {
+            headers: {
+              'Authorization': `token ${accessToken}`
+            }
+          });
+          
+          if (artifactsResponse.ok) {
+            const artifactsData = await artifactsResponse.json();
+            const subscriptionArtifact = artifactsData.artifacts.find(artifact => 
+              artifact.name.includes('azure-subscriptions')
+            );
+            
+            if (subscriptionArtifact) {
+              appendLog(`📦 Found subscription artifact: ${subscriptionArtifact.name}`);
+              displaySubscriptionArtifactInfo(subscriptionArtifact);
+            }
+          }
+          
+          // Also try to parse logs for subscription information
+          const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${subscriptionJob.id}/logs`, {
+            headers: {
+              'Authorization': `token ${accessToken}`
+            }
+          });
+          
+          if (logsResponse.ok) {
+            const logsText = await logsResponse.text();
+            parseSubscriptionLogs(logsText);
+          }
+          
+        } catch (error) {
+          console.error('Error fetching subscription results:', error);
+          appendLog(`❌ Error fetching subscription results: ${error.message}`, true);
+        }
+      }
+      
+      /**
+       * Parse workflow logs to extract subscription information
+       */
+      function parseSubscriptionLogs(logsText) {
+        try {
+          appendLog('📝 Parsing workflow logs for subscription data...');
+          
+          const lines = logsText.split('\n');
+          let subscriptionCount = 0;
+          let subscriptions = [];
+          let jsonData = null;
+          
+          // Look for subscription information in the logs
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Look for subscription count
+            if (line.includes('Found') && line.includes('subscription(s)')) {
+              const match = line.match(/Found (\d+) subscription\(s\)/);
+              if (match) {
+                subscriptionCount = parseInt(match[1]);
+              }
+            }
+            
+            // Look for JSON data (find lines that start with [ or {)
+            if (line.trim().startsWith('[') || line.trim().startsWith('{')) {
+              try {
+                // Try to parse as JSON
+                const potentialJson = line.trim();
+                if (potentialJson.includes('"name"') && potentialJson.includes('"id"')) {
+                  jsonData = JSON.parse(potentialJson);
+                  if (Array.isArray(jsonData)) {
+                    subscriptions = jsonData;
+                  } else if (jsonData.name) {
+                    subscriptions = [jsonData];
+                  }
+                }
+              } catch (e) {
+                // Ignore JSON parse errors
+              }
+            }
+            
+            // Look for individual subscription entries (lines starting with "- ")
+            if (line.includes('- ') && line.includes('(') && line.includes(')')) {
+              const match = line.match(/- (.+) \(([^)]+)\) - State: (.+)/);
+              if (match) {
+                subscriptions.push({
+                  name: match[1],
+                  id: match[2],
+                  state: match[3]
+                });
+              }
+            }
+          }
+          
+          // Display the results
+          if (subscriptionCount > 0 || subscriptions.length > 0) {
+            displaySubscriptionResults(subscriptions, subscriptionCount, jsonData);
+          } else {
+            appendLog('⚠️ No subscription data found in logs');
+          }
+          
+        } catch (error) {
+          appendLog(`❌ Error parsing logs: ${error.message}`, true);
+        }
+      }
+      
+      /**
+       * Display subscription results in the UI
+       */
+      function displaySubscriptionResults(subscriptions, count, jsonData) {
+        appendLog(`📊 Displaying results for ${subscriptions.length} subscription(s)`);
+        
+        // Show the results section
+        const resultsSection = document.getElementById('subscription-results');
+        resultsSection.style.display = 'block';
+        
+        // Update count
+        const countElement = document.getElementById('subscription-count');
+        countElement.innerHTML = `<h3>Total Subscriptions Found: ${count || subscriptions.length}</h3>`;
+        
+        // Display subscription list
+        const listElement = document.getElementById('subscription-list');
+        if (subscriptions.length > 0) {
+          let listHtml = '<h4>Subscription Names:</h4><ul>';
+          subscriptions.forEach(sub => {
+            const name = sub.name || 'Unknown';
+            const state = sub.state || 'Unknown';
+            const id = sub.id || 'N/A';
+            listHtml += `<li><strong>${name}</strong>`;
+            if (state !== 'Unknown') {
+              listHtml += ` - <span style="color: ${state === 'Enabled' ? 'green' : 'orange'}">${state}</span>`;
+            }
+            if (id && id !== 'N/A') {
+              listHtml += `<br><small style="color: #666; font-family: monospace;">${id}</small>`;
+            }
+            listHtml += '</li>';
+          });
+          listHtml += '</ul>';
+          listElement.innerHTML = listHtml;
+        } else {
+          listElement.innerHTML = '<p>No subscription details available</p>';
+        }
+        
+        // Display raw JSON data
+        const jsonElement = document.getElementById('subscription-json');
+        if (jsonData) {
+          jsonElement.textContent = JSON.stringify(jsonData, null, 2);
+        } else if (subscriptions.length > 0) {
+          jsonElement.textContent = JSON.stringify(subscriptions, null, 2);
+        } else {
+          jsonElement.textContent = 'No JSON data available';
+        }
+      }
+      
+      /**
+       * Display artifact information
+       */
+      function displaySubscriptionArtifactInfo(artifact) {
+        appendLog(`📦 Artifact available: ${artifact.name}`);
+        appendLog(`📅 Created: ${new Date(artifact.created_at).toLocaleString()}`);
+        appendLog(`💾 Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB`);
+        
+        // Add download link info
+        const resultsSection = document.getElementById('subscription-results');
+        if (resultsSection.style.display === 'none') {
+          resultsSection.style.display = 'block';
+        }
+        
+        const downloadInfo = document.createElement('div');
+        downloadInfo.style.marginTop = '10px';
+        downloadInfo.style.padding = '10px';
+        downloadInfo.style.backgroundColor = '#e3f2fd';
+        downloadInfo.style.borderRadius = '4px';
+        downloadInfo.innerHTML = `
+          <h4>📦 Download Subscription Data</h4>
+          <p><strong>Artifact:</strong> ${artifact.name}</p>
+          <p><strong>Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
+          <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>
+          <p><small>Note: Artifacts can be downloaded from the GitHub Actions page for this workflow run.</small></p>
+        `;
+        
+        const subscriptionData = document.getElementById('subscription-data');
+        subscriptionData.appendChild(downloadInfo);
       }
     });
   </script>
