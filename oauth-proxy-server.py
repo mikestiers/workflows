@@ -104,8 +104,7 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
             if error:
                 self.send_html_response(f"""
                     <html><body>
-                        <h1>OAuth Error</h1>
-                        <p>Error: {error}</p>
+                        <h1>OAuth Error</h1>                        <p>Error: {error}</p>
                         <p>Description: {query_params.get('error_description', [''])[0]}</p>
                         <script>window.close();</script>
                     </body></html>
@@ -115,7 +114,8 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
             if not code:
                 self.send_error(400, "Missing authorization code")
                 return
-              # Exchange code for access token
+            
+            # Exchange code for access token
             token_data = self.exchange_code_for_token(code)
             
             if token_data.get('access_token'):

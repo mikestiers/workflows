@@ -217,10 +217,20 @@
       authButton.addEventListener('click', startAuthentication);
       logoutButton.addEventListener('click', logOut);
       workflowButton.addEventListener('click', triggerWorkflow);
-      
-      // Listen for OAuth callback messages
+        // Listen for OAuth callback messages
       window.addEventListener('message', handleOAuthMessage);
-        /**
+      
+      // Add additional debugging for message events
+      window.addEventListener('message', function(event) {
+        console.log('=== RAW MESSAGE EVENT ===');
+        console.log('Event:', event);
+        console.log('Origin:', event.origin);
+        console.log('Data:', event.data);
+        console.log('Source:', event.source);
+        console.log('========================');
+      });
+      
+      /**
        * Handle OAuth callback messages from popup window
        */
       function handleOAuthMessage(event) {
