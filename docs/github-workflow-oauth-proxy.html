@@ -830,8 +830,7 @@
           console.error('Error fetching resource group results:', error);
           appendLog(`❌ Error fetching resource group results: ${error.message}`, true);
         }
-      }
-        /**
+      }      /**
        * Parse workflow logs to extract resource group information
        */
       function parseResourceGroupLogs(logsText) {
@@ -852,6 +851,7 @@
               const match = line.match(/Found (\d+) resource group\(s\)/);
               if (match) {
                 resourceGroupCount = parseInt(match[1]);
+                appendLog(`📊 Parsed count: ${resourceGroupCount}`);
               }
             }
             
@@ -864,8 +864,10 @@
                   jsonData = JSON.parse(potentialJson);
                   if (Array.isArray(jsonData)) {
                     resourceGroups = jsonData;
+                    appendLog(`📋 Parsed ${resourceGroups.length} resource groups from JSON`);
                   } else if (jsonData.name) {
                     resourceGroups = [jsonData];
+                    appendLog(`📋 Parsed 1 resource group from JSON`);
                   }
                 }
               } catch (e) {
@@ -882,9 +884,12 @@
                   location: match[2],
                   state: match[3]
                 });
+                appendLog(`📝 Parsed resource group: ${match[1]} in ${match[2]}`);
               }
             }
           }
+          
+          appendLog(`📊 Total parsed: ${resourceGroups.length} resource groups`);
           
           // Display the results
           if (resourceGroupCount > 0 || resourceGroups.length > 0) {
@@ -896,8 +901,7 @@
         } catch (error) {
           appendLog(`❌ Error parsing logs: ${error.message}`, true);
         }
-      }
-        /**
+      }      /**
        * Display resource group results in the UI
        */
       function displayResourceGroupResults(resourceGroups, count, jsonData) {
@@ -914,21 +918,23 @@
         // Display resource group list
         const listElement = document.getElementById('resource-group-list');
         if (resourceGroups.length > 0) {
-          let listHtml = '<h4>Resource Group Names:</h4><ul>';
+          let listHtml = '<h4>Resource Group Details:</h4><ul>';
           resourceGroups.forEach(rg => {
             const name = rg.name || 'Unknown';
             const location = rg.location || 'Unknown';
             const state = rg.state || rg.properties?.provisioningState || 'Unknown';
             const id = rg.id || 'N/A';
+            
             listHtml += `<li><strong>${name}</strong>`;
             if (location !== 'Unknown') {
-              listHtml += ` - <span style="color: #2196F3">${location}</span>`;
+              listHtml += ` - <span style="color: #2196F3; font-weight: bold;">${location}</span>`;
             }
             if (state !== 'Unknown') {
-              listHtml += ` - <span style="color: ${state === 'Succeeded' ? 'green' : 'orange'}">${state}</span>`;
+              const stateColor = state === 'Succeeded' ? 'green' : (state === 'Failed' ? 'red' : 'orange');
+              listHtml += ` - <span style="color: ${stateColor}; font-weight: bold;">${state}</span>`;
             }
-            if (id && id !== 'N/A') {
-              listHtml += `<br><small style="color: #666; font-family: monospace;">${id}</small>`;
+            if (id && id !== 'N/A' && id.length > 10) {
+              listHtml += `<br><small style="color: #666; font-family: monospace; font-size: 11px;">${id}</small>`;
             }
             listHtml += '</li>';
           });
@@ -947,6 +953,8 @@
         } else {
           jsonElement.textContent = 'No JSON data available';
         }
+        
+        appendLog(`✅ Resource group results displayed successfully`);
       }
         /**
        * Display artifact information
