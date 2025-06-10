@@ -25,13 +25,13 @@ jobs:
         id: get-rgs
         shell: bash
         run: |
-          echo "🔍 Getting Azure resource groups..."
-          
-          # Get resource groups in JSON format and filter to only name and location
+          echo "🔍 Getting Azure resource groups..."          # Get resource groups in JSON format and filter to only name and location
           az group list --output json > temp_rgs.json 2>/dev/null || echo "[]" > temp_rgs.json
           
-          # Filter to only name and location using jq - using map for clarity
-          RESOURCE_GROUPS_JSON=$(cat temp_rgs.json | jq --color-output false 'map({name: .name, location: .location})')
+          # Filter to only name and location using simple jq operations
+          RESOURCE_GROUPS_JSON=$(cat temp_rgs.json | jq --color-output false '.')
+          FILTERED_JSON=$(echo "$RESOURCE_GROUPS_JSON" | jq --color-output false '.[] | {name, location}')
+          RESOURCE_GROUPS_JSON=$(echo "$FILTERED_JSON" | jq --color-output false -s '.')
           
           # Check if we have any resource groups
           RG_COUNT=$(echo "$RESOURCE_GROUPS_JSON" | jq --color-output false 'length')
