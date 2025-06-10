@@ -1396,8 +1396,7 @@
             <h4 style="margin-top: 0; color: #2e7d32;">✅ Complete Data Available for Download</h4>
             <p><strong>Artifact Name:</strong> ${artifact.name}</p>
             <p><strong>File Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
-            <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>
-            <p><strong>Contains:</strong> JSON data and human-readable text format</p>
+            <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>            <p><strong>Contains:</strong> Complete JSON resource group data</p>
           </div>
         `;
         
@@ -1409,21 +1408,21 @@
             <ol style="margin: 0; padding-left: 20px;">
               <li>Click the <strong>"Open Workflow Run"</strong> link above</li>
               <li>Scroll down to the <strong>"Artifacts"</strong> section on the GitHub page</li>
-              <li>Click on <strong>"${artifact.name}"</strong> to download the ZIP file</li>
-              <li>Extract the ZIP to find:
+              <li>Click on <strong>"${artifact.name}"</strong> to download the JSON file directly</li>
+              <li>The file contains complete resource group data including:
                 <ul style="margin-top: 5px;">
-                  <li><code>resource-groups.json</code> - Complete JSON data</li>
-                  <li><code>resource-groups.txt</code> - Human-readable format</li>
+                  <li>Resource group names, locations, and states</li>
+                  <li>Full Azure resource IDs and properties</li>
+                  <li>Provisioning status and metadata</li>
                 </ul>
               </li>
             </ol>
             <p style="margin-top: 10px; color: #666; font-size: 14px;">
-              💡 <strong>Tip:</strong> The JSON file contains complete resource group information including IDs, properties, and metadata.
+              💡 <strong>Tip:</strong> Since this is a single JSON file, it downloads directly without ZIP compression, making it easier to use programmatically.
             </p>
           </div>
         `;
-        
-        // Show artifact info in JSON section too
+          // Show artifact info in JSON section too
         const jsonElement = document.getElementById('resource-group-json');
         jsonElement.textContent = `Artifact Information:
 Name: ${artifact.name}
@@ -1431,8 +1430,8 @@ Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB
 Created: ${new Date(artifact.created_at).toLocaleString()}
 Download URL: Available on GitHub Actions page
 
-The complete resource group data is available in the downloadable artifact above.
-This includes both JSON format and human-readable text format.`;
+The complete resource group data is available as a single JSON file download.
+This file contains the full Azure resource group information in JSON format.`;
         
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth' });
