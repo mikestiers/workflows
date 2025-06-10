@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>GitHub Workflow with OAuth Proxy</title>
+  <title>GitHub Workflow with OAuth Proxy - Azure Resource Groups</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -160,23 +160,22 @@
     <button id="auth-button" class="workflow-button auth-button">Authenticate with GitHub</button>
     <button id="logout-button" class="workflow-button" style="background-color: #607D8B; display: none; margin-top: 5px;">Log Out</button>
     <div id="auth-status"></div>
-  </div>
-    <div class="workflow-section">
-    <h2>Step 2: Trigger the Azure Subscriptions Workflow</h2>
-    <p>After authenticating, you can trigger the GitHub workflow at <a href="https://github.com/mikestiers/workflows/actions/workflows/GetSubscriptions.yml" target="_blank">mikestiers/workflows/actions/workflows/GetSubscriptions.yml</a></p>
+  </div>    <div class="workflow-section">
+    <h2>Step 2: Trigger the Azure Resource Groups Workflow</h2>
+    <p>After authenticating, you can trigger the GitHub workflow at <a href="https://github.com/mikestiers/workflows/actions/workflows/GetResourceGroups.yml" target="_blank">mikestiers/workflows/actions/workflows/GetResourceGroups.yml</a></p>
     
-    <button id="workflow-trigger" class="workflow-button" disabled>Get Azure Subscriptions</button>    <div id="workflow-status"></div>
+    <button id="workflow-trigger" class="workflow-button" disabled>Get Azure Resource Groups</button>    <div id="workflow-status"></div>
     <div id="workflow-logs" class="workflow-logs"></div>
   </div>
 
-  <div class="workflow-section" id="subscription-results" style="display: none;">
-    <h2>📋 Azure Subscription Results</h2>
-    <div id="subscription-count"></div>
-    <div id="subscription-list"></div>
-    <div id="subscription-data" style="margin-top: 15px;">
+  <div class="workflow-section" id="resource-group-results" style="display: none;">
+    <h2>📋 Azure Resource Group Results</h2>
+    <div id="resource-group-count"></div>
+    <div id="resource-group-list"></div>
+    <div id="resource-group-data" style="margin-top: 15px;">
       <details>
         <summary style="cursor: pointer; font-weight: bold;">View Raw JSON Data</summary>
-        <pre id="subscription-json" style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;"></pre>
+        <pre id="resource-group-json" style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;"></pre>
       </details>
     </div>
   </div>
@@ -184,11 +183,10 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       // Configuration
-      const PROXY_BASE_URL = 'https://github-oauth-proxy-2025.azurewebsites.net';
-        // GitHub repository details
+      const PROXY_BASE_URL = 'https://github-oauth-proxy-2025.azurewebsites.net';      // GitHub repository details
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
-      const workflowId = 'GetSubscriptions.yml';
+      const workflowId = 'GetResourceGroups.yml';
         // Authentication state
       let accessToken = '';
       let authenticationInProgress = false;
@@ -583,8 +581,7 @@
           appendLog('No run ID available, cannot poll for status');
           appendLog('Please check GitHub Actions directly for workflow status');
           
-          workflowButton.classList.remove('running');
-          workflowButton.textContent = 'Get Azure Subscriptions';
+          workflowButton.classList.remove('running');          workflowButton.textContent = 'Get Azure Resource Groups';
           
           workflowStatus.classList.remove('status-running');
           return;
@@ -629,13 +626,12 @@
                 const statusText = document.createElement('div');
                 statusText.textContent = 'Workflow completed successfully!';
                 workflowStatus.appendChild(statusText);
-                
-                // Fetch and display subscription data
-                fetchSubscriptionResults(runId);
+                  // Fetch and display resource group data
+                fetchResourceGroupResults(runId);
                   // Reset button after 5 seconds
                 setTimeout(function() {
                   workflowButton.classList.remove('success');
-                  workflowButton.textContent = 'Get Azure Subscriptions';
+                  workflowButton.textContent = 'Get Azure Resource Groups';
                 }, 5000);
               } else {
                 // Update to failure state
@@ -650,11 +646,10 @@
                   const statusText = document.createElement('div');
                 statusText.textContent = `Workflow failed with conclusion: ${conclusion}`;
                 workflowStatus.appendChild(statusText);
-                
-                // Reset button after 5 seconds
+                  // Reset button after 5 seconds
                 setTimeout(function() {
                   workflowButton.classList.remove('failed');
-                  workflowButton.textContent = 'Get Azure Subscriptions';
+                  workflowButton.textContent = 'Get Azure Resource Groups';
                 }, 5000);
               }
               
@@ -662,10 +657,9 @@
               return;            } else if (pollCount >= maxPolls) {
               // We've polled too many times, stop polling
               appendLog('Exceeded maximum polling attempts. Please check GitHub directly for status.', true);
-              
-              // Reset button
+                // Reset button
               workflowButton.classList.remove('running');
-              workflowButton.textContent = 'Get Azure Subscriptions';
+              workflowButton.textContent = 'Get Azure Resource Groups';
               return;
             }
             
@@ -674,10 +668,9 @@
             setTimeout(checkStatus, 2000); // Poll every 2 seconds
           })          .catch(error => {
             appendLog(`Error checking workflow status: ${error.message}`, true);
-            
-            // On error, stop polling and reset the button
+              // On error, stop polling and reset the button
             workflowButton.classList.remove('running');
-            workflowButton.textContent = 'Get Azure Subscriptions';
+            workflowButton.textContent = 'Get Azure Resource Groups';
           });
         }
         
@@ -701,11 +694,10 @@
         const statusText = document.createElement('div');
         statusText.textContent = `Failed to trigger workflow: ${errorMessage}`;
         workflowStatus.innerHTML = '';
-        workflowStatus.appendChild(statusText);
-          // Reset button after 5 seconds
+        workflowStatus.appendChild(statusText);          // Reset button after 5 seconds
         setTimeout(function() {
           workflowButton.classList.remove('failed');
-          workflowButton.textContent = 'Get Azure Subscriptions';
+          workflowButton.textContent = 'Get Azure Resource Groups';
           workflowStatus.classList.remove('status-failed');
           workflowStatus.innerHTML = '';
         }, 5000);
@@ -759,13 +751,12 @@
         workflowLogs.appendChild(logEntry);
         workflowLogs.scrollTop = workflowLogs.scrollHeight;
       }
-      
-      /**
-       * Fetch subscription results from the completed workflow
+        /**
+       * Fetch resource group results from the completed workflow
        */
-      async function fetchSubscriptionResults(runId) {
+      async function fetchResourceGroupResults(runId) {
         try {
-          appendLog('🔍 Fetching subscription results from workflow...');
+          appendLog('🔍 Fetching resource group results from workflow...');
           
           // Get job details to access outputs
           const jobsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/jobs`, {
@@ -781,15 +772,15 @@
           const jobsData = await jobsResponse.json();
           appendLog(`📋 Found ${jobsData.jobs.length} job(s)`);
           
-          // Find the get-subscriptions job
-          const subscriptionJob = jobsData.jobs.find(job => job.name === 'Get Azure Subscriptions');
+          // Find the get-resource-groups job
+          const resourceGroupJob = jobsData.jobs.find(job => job.name === 'Get Azure Resource Groups');
           
-          if (!subscriptionJob) {
-            appendLog('⚠️ Could not find subscription job in workflow run', true);
+          if (!resourceGroupJob) {
+            appendLog('⚠️ Could not find resource group job in workflow run', true);
             return;
           }
           
-          appendLog(`✅ Found subscription job with status: ${subscriptionJob.status}`);
+          appendLog(`✅ Found resource group job with status: ${resourceGroupJob.status}`);
           
           // Get workflow run details to access outputs
           const runResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
@@ -804,7 +795,7 @@
           
           const runData = await runResponse.json();
           
-          // Try to get artifacts which contain the subscription data
+          // Try to get artifacts which contain the resource group data
           const artifactsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/artifacts`, {
             headers: {
               'Authorization': `token ${accessToken}`
@@ -813,18 +804,18 @@
           
           if (artifactsResponse.ok) {
             const artifactsData = await artifactsResponse.json();
-            const subscriptionArtifact = artifactsData.artifacts.find(artifact => 
-              artifact.name.includes('azure-subscriptions')
+            const resourceGroupArtifact = artifactsData.artifacts.find(artifact => 
+              artifact.name.includes('azure-resource-groups')
             );
             
-            if (subscriptionArtifact) {
-              appendLog(`📦 Found subscription artifact: ${subscriptionArtifact.name}`);
-              displaySubscriptionArtifactInfo(subscriptionArtifact);
+            if (resourceGroupArtifact) {
+              appendLog(`📦 Found resource group artifact: ${resourceGroupArtifact.name}`);
+              displayResourceGroupArtifactInfo(resourceGroupArtifact);
             }
           }
           
-          // Also try to parse logs for subscription information
-          const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${subscriptionJob.id}/logs`, {
+          // Also try to parse logs for resource group information
+          const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`, {
             headers: {
               'Authorization': `token ${accessToken}`
             }
@@ -832,36 +823,35 @@
           
           if (logsResponse.ok) {
             const logsText = await logsResponse.text();
-            parseSubscriptionLogs(logsText);
+            parseResourceGroupLogs(logsText);
           }
           
         } catch (error) {
-          console.error('Error fetching subscription results:', error);
-          appendLog(`❌ Error fetching subscription results: ${error.message}`, true);
+          console.error('Error fetching resource group results:', error);
+          appendLog(`❌ Error fetching resource group results: ${error.message}`, true);
         }
       }
-      
-      /**
-       * Parse workflow logs to extract subscription information
+        /**
+       * Parse workflow logs to extract resource group information
        */
-      function parseSubscriptionLogs(logsText) {
+      function parseResourceGroupLogs(logsText) {
         try {
-          appendLog('📝 Parsing workflow logs for subscription data...');
+          appendLog('📝 Parsing workflow logs for resource group data...');
           
           const lines = logsText.split('\n');
-          let subscriptionCount = 0;
-          let subscriptions = [];
+          let resourceGroupCount = 0;
+          let resourceGroups = [];
           let jsonData = null;
           
-          // Look for subscription information in the logs
+          // Look for resource group information in the logs
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
-            // Look for subscription count
-            if (line.includes('Found') && line.includes('subscription(s)')) {
-              const match = line.match(/Found (\d+) subscription\(s\)/);
+            // Look for resource group count
+            if (line.includes('Found') && line.includes('resource group(s)')) {
+              const match = line.match(/Found (\d+) resource group\(s\)/);
               if (match) {
-                subscriptionCount = parseInt(match[1]);
+                resourceGroupCount = parseInt(match[1]);
               }
             }
             
@@ -870,12 +860,12 @@
               try {
                 // Try to parse as JSON
                 const potentialJson = line.trim();
-                if (potentialJson.includes('"name"') && potentialJson.includes('"id"')) {
+                if (potentialJson.includes('"name"') && potentialJson.includes('"location"')) {
                   jsonData = JSON.parse(potentialJson);
                   if (Array.isArray(jsonData)) {
-                    subscriptions = jsonData;
+                    resourceGroups = jsonData;
                   } else if (jsonData.name) {
-                    subscriptions = [jsonData];
+                    resourceGroups = [jsonData];
                   }
                 }
               } catch (e) {
@@ -883,13 +873,13 @@
               }
             }
             
-            // Look for individual subscription entries (lines starting with "- ")
+            // Look for individual resource group entries (lines starting with "- ")
             if (line.includes('- ') && line.includes('(') && line.includes(')')) {
-              const match = line.match(/- (.+) \(([^)]+)\) - State: (.+)/);
+              const match = line.match(/- (.+) \(([^)]+)\) - (.+)/);
               if (match) {
-                subscriptions.push({
+                resourceGroups.push({
                   name: match[1],
-                  id: match[2],
+                  location: match[2],
                   state: match[3]
                 });
               }
@@ -897,42 +887,45 @@
           }
           
           // Display the results
-          if (subscriptionCount > 0 || subscriptions.length > 0) {
-            displaySubscriptionResults(subscriptions, subscriptionCount, jsonData);
+          if (resourceGroupCount > 0 || resourceGroups.length > 0) {
+            displayResourceGroupResults(resourceGroups, resourceGroupCount, jsonData);
           } else {
-            appendLog('⚠️ No subscription data found in logs');
+            appendLog('⚠️ No resource group data found in logs');
           }
           
         } catch (error) {
           appendLog(`❌ Error parsing logs: ${error.message}`, true);
         }
       }
-      
-      /**
-       * Display subscription results in the UI
+        /**
+       * Display resource group results in the UI
        */
-      function displaySubscriptionResults(subscriptions, count, jsonData) {
-        appendLog(`📊 Displaying results for ${subscriptions.length} subscription(s)`);
+      function displayResourceGroupResults(resourceGroups, count, jsonData) {
+        appendLog(`📊 Displaying results for ${resourceGroups.length} resource group(s)`);
         
         // Show the results section
-        const resultsSection = document.getElementById('subscription-results');
+        const resultsSection = document.getElementById('resource-group-results');
         resultsSection.style.display = 'block';
         
         // Update count
-        const countElement = document.getElementById('subscription-count');
-        countElement.innerHTML = `<h3>Total Subscriptions Found: ${count || subscriptions.length}</h3>`;
+        const countElement = document.getElementById('resource-group-count');
+        countElement.innerHTML = `<h3>Total Resource Groups Found: ${count || resourceGroups.length}</h3>`;
         
-        // Display subscription list
-        const listElement = document.getElementById('subscription-list');
-        if (subscriptions.length > 0) {
-          let listHtml = '<h4>Subscription Names:</h4><ul>';
-          subscriptions.forEach(sub => {
-            const name = sub.name || 'Unknown';
-            const state = sub.state || 'Unknown';
-            const id = sub.id || 'N/A';
+        // Display resource group list
+        const listElement = document.getElementById('resource-group-list');
+        if (resourceGroups.length > 0) {
+          let listHtml = '<h4>Resource Group Names:</h4><ul>';
+          resourceGroups.forEach(rg => {
+            const name = rg.name || 'Unknown';
+            const location = rg.location || 'Unknown';
+            const state = rg.state || rg.properties?.provisioningState || 'Unknown';
+            const id = rg.id || 'N/A';
             listHtml += `<li><strong>${name}</strong>`;
+            if (location !== 'Unknown') {
+              listHtml += ` - <span style="color: #2196F3">${location}</span>`;
+            }
             if (state !== 'Unknown') {
-              listHtml += ` - <span style="color: ${state === 'Enabled' ? 'green' : 'orange'}">${state}</span>`;
+              listHtml += ` - <span style="color: ${state === 'Succeeded' ? 'green' : 'orange'}">${state}</span>`;
             }
             if (id && id !== 'N/A') {
               listHtml += `<br><small style="color: #666; font-family: monospace;">${id}</small>`;
@@ -942,30 +935,29 @@
           listHtml += '</ul>';
           listElement.innerHTML = listHtml;
         } else {
-          listElement.innerHTML = '<p>No subscription details available</p>';
+          listElement.innerHTML = '<p>No resource group details available</p>';
         }
         
         // Display raw JSON data
-        const jsonElement = document.getElementById('subscription-json');
+        const jsonElement = document.getElementById('resource-group-json');
         if (jsonData) {
           jsonElement.textContent = JSON.stringify(jsonData, null, 2);
-        } else if (subscriptions.length > 0) {
-          jsonElement.textContent = JSON.stringify(subscriptions, null, 2);
+        } else if (resourceGroups.length > 0) {
+          jsonElement.textContent = JSON.stringify(resourceGroups, null, 2);
         } else {
           jsonElement.textContent = 'No JSON data available';
         }
       }
-      
-      /**
+        /**
        * Display artifact information
        */
-      function displaySubscriptionArtifactInfo(artifact) {
+      function displayResourceGroupArtifactInfo(artifact) {
         appendLog(`📦 Artifact available: ${artifact.name}`);
         appendLog(`📅 Created: ${new Date(artifact.created_at).toLocaleString()}`);
         appendLog(`💾 Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB`);
         
         // Add download link info
-        const resultsSection = document.getElementById('subscription-results');
+        const resultsSection = document.getElementById('resource-group-results');
         if (resultsSection.style.display === 'none') {
           resultsSection.style.display = 'block';
         }
@@ -976,15 +968,15 @@
         downloadInfo.style.backgroundColor = '#e3f2fd';
         downloadInfo.style.borderRadius = '4px';
         downloadInfo.innerHTML = `
-          <h4>📦 Download Subscription Data</h4>
+          <h4>📦 Download Resource Group Data</h4>
           <p><strong>Artifact:</strong> ${artifact.name}</p>
           <p><strong>Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
           <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>
           <p><small>Note: Artifacts can be downloaded from the GitHub Actions page for this workflow run.</small></p>
         `;
         
-        const subscriptionData = document.getElementById('subscription-data');
-        subscriptionData.appendChild(downloadInfo);
+        const resourceGroupData = document.getElementById('resource-group-data');
+        resourceGroupData.appendChild(downloadInfo);
       }
     });
   </script>
