@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>GitHub Workflow with OAuth Proxy</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 650px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    .workflow-section {
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    
+    .workflow-button {
+      background-color: #2196F3;
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      display: block;
+      width: 200px;
+      margin: 20px 0;
+      transition: background-color 0.3s;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    
+    .auth-button {
+      background-color: #28a745;
+    }
+    
+    .workflow-button.running {
+      background-color: #FFC107;
+      cursor: wait;
+      position: relative;
+    }
+    
+    .workflow-button.success {
+      background-color: #4CAF50;
+    }
+    
+    .workflow-button.failed {
+      background-color: #F44336;
+    }
+    
+    .workflow-button:hover {
+      opacity: 0.9;
+    }
+    
+    .workflow-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .workflow-button.running::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 4px;
+      width: 0%;
+      background-color: rgba(255, 255, 255, 0.7);
+      animation: progress 2s infinite linear;
+    }
+    
+    @keyframes progress {
+      0% { width: 0%; }
+      100% { width: 100%; }
+    }
+    
+    #workflow-status, #auth-status {
+      margin-top: 15px;
+      padding: 10px;
+      min-height: 20px;
+      border-radius: 4px;
+      transition: all 0.3s;
+    }
+    
+    .status-running {
+      background-color: #FFF8E1;
+      border-left: 4px solid #FFC107;
+      padding-left: 10px;
+    }
+    
+    .status-success {
+      background-color: #E8F5E9;
+      border-left: 4px solid #4CAF50;
+      padding-left: 10px;
+    }
+    
+    .status-failed {
+      background-color: #FFEBEE;
+      border-left: 4px solid #F44336;
+      padding-left: 10px;
+    }
+    
+    .workflow-logs {
+      font-family: monospace;
+      background-color: #263238;
+      color: #ECEFF1;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 15px;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    
+    .workflow-logs.show {
+      display: block;
+    }
+    
+    .log-entry {
+      margin: 5px 0;
+      line-height: 1.5;
+    }
+    
+    .timestamp {
+      color: #90A4AE;
+    }
+    
+    .proxy-info {
+      background-color: #e3f2fd;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-left: 4px solid #2196F3;
+    }
+    
+    .proxy-info h3 {
+      margin-top: 0;
+      color: #1976D2;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>GitHub Workflow with OAuth Proxy</h1>
+    <div class="proxy-info">
+    <h3>🔧 Setup Instructions</h3>
+    <p><strong>Step 1:</strong> Make sure the Python proxy server is running</p>
+    <p><strong>Step 2:</strong> Configure your GitHub OAuth App with callback URL: <code>https://github-oauth-proxy-2025.azurewebsites.net/oauth/callback</code></p>
+    <p><strong>Step 3:</strong> Set your GitHub Client Secret in the proxy server</p>
+  </div>
+
+  <div class="workflow-section">
+    <h2>Step 1: Authenticate with GitHub</h2>
+    <p>Click the button below to authenticate with GitHub using OAuth.</p>
+    <button id="auth-button" class="workflow-button auth-button">Authenticate with GitHub</button>
+    <button id="logout-button" class="workflow-button" style="background-color: #607D8B; display: none; margin-top: 5px;">Log Out</button>
+    <div id="auth-status"></div>
+  </div>
+  
+  <div class="workflow-section">
+    <h2>Step 2: Trigger the Workflow</h2>
+    <p>After authenticating, you can trigger the GitHub workflow at <a href="https://github.com/mikestiers/workflows/actions/workflows/root.yml" target="_blank">mikestiers/workflows/actions/workflows/root.yml</a></p>
+    
+    <button id="workflow-trigger" class="workflow-button" disabled>Trigger Workflow</button>
+    <div id="workflow-status"></div>
+    <div id="workflow-logs" class="workflow-logs"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Configuration
+      const PROXY_BASE_URL = 'https://github-oauth-proxy-2025.azurewebsites.net';
+      
+      // GitHub repository details
+      const repoOwner = 'mikestiers';
+      const repoName = 'workflows';
+      const workflowId = 'root.yml';
+        // Authentication state
+      let accessToken = '';
+      let authenticationInProgress = false;
+      
+      // Cache DOM elements
+      const authButton = document.getElementById('auth-button');
+      const logoutButton = document.getElementById('logout-button');
+      const authStatus = document.getElementById('auth-status');
+      
+      const workflowButton = document.getElementById('workflow-trigger');
+      const workflowStatus = document.getElementById('workflow-status');
+      const workflowLogs = document.getElementById('workflow-logs');
+      
+      // Restore token from localStorage if available
+      if (localStorage.getItem('github_token')) {
+        accessToken = localStorage.getItem('github_token');
+        authButton.textContent = 'Re-Authenticate with GitHub';
+        logoutButton.style.display = 'block';
+        workflowButton.disabled = false;
+        appendAuthMessage('🔄 Authentication restored from previous session', false);
+        
+        // Verify the token is still valid
+        verifyTokenPermissions();
+      }
+      
+      // Add event listeners
+      authButton.addEventListener('click', startAuthentication);
+      logoutButton.addEventListener('click', logOut);
+      workflowButton.addEventListener('click', triggerWorkflow);      // Listen for OAuth callback messages
+      window.addEventListener('message', handleOAuthMessage);
+        /**
+       * Handle OAuth callback messages from popup window
+       */
+      function handleOAuthMessage(event) {
+        console.log('Received message:', event);
+        console.log('Message origin:', event.origin);
+        console.log('Expected origin:', PROXY_BASE_URL);
+        console.log('Message data:', event.data);
+        
+        // Verify origin for security (but be more lenient for Azure)
+        const expectedDomain = new URL(PROXY_BASE_URL).hostname;
+        const actualDomain = new URL(event.origin).hostname;
+        
+        if (actualDomain !== expectedDomain) {
+          console.warn('Message from unexpected origin, ignoring');
+          console.warn('Expected domain:', expectedDomain, 'Actual domain:', actualDomain);
+          return;
+        }
+          if (event.data.type === 'GITHUB_OAUTH_SUCCESS') {
+          console.log('OAuth success message received');
+          const token = event.data.access_token;
+          appendAuthMessage('✅ Received access token from popup', false);
+          handleAuthenticationSuccess(token);
+        } else if (event.data.type === 'GITHUB_OAUTH_ERROR') {
+          console.log('OAuth error message received');
+          appendAuthMessage(`❌ Authentication failed: ${event.data.error}`, true);
+          authButton.disabled = false;
+          authButton.textContent = 'Authenticate with GitHub';
+        } else {
+          console.log('Unknown message type:', event.data.type);
+        }
+      }
+      
+      /**
+       * Start the GitHub OAuth flow via proxy
+       */
+      function startAuthentication() {
+        // Prevent multiple clicks
+        if (authButton.disabled) {
+          return;
+        }
+        
+        // Clear previous status
+        authStatus.innerHTML = '';
+        authStatus.className = '';
+          // Update button state
+        authButton.disabled = true;
+        authButton.textContent = 'Opening GitHub...';
+        authenticationInProgress = true;
+          appendAuthMessage('🔄 Initiating GitHub OAuth flow...', false);
+        
+        // Open OAuth popup
+        const oauthUrl = `${PROXY_BASE_URL}/oauth/authorize`;
+        const popup = window.open(
+          oauthUrl, 
+          'github_oauth', 
+          'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+        
+        if (!popup) {
+          appendAuthMessage('❌ Popup blocked! Please allow popups and try again.', true);
+          authButton.disabled = false;
+          authButton.textContent = 'Authenticate with GitHub';
+          return;
+        }        appendAuthMessage('🔄 Complete authentication in the popup window...', false);
+        
+        // Check if popup was closed without completing authentication
+        const checkClosed = setInterval(() => {
+          if (popup.closed && authenticationInProgress) {
+            clearInterval(checkClosed);
+            appendAuthMessage('⚠️ Authentication window was closed', false);
+            authButton.disabled = false;
+            authButton.textContent = 'Authenticate with GitHub';
+            authenticationInProgress = false;
+          }
+        }, 1000);
+      }
+      
+      /**
+       * Handle successful authentication
+       */      function handleAuthenticationSuccess(token) {
+        console.log('🎉 Authentication successful, storing token');
+        
+        // Clear authentication state
+        authenticationInProgress = false;
+        
+        // Store the access token
+        accessToken = token;
+        localStorage.setItem('github_token', accessToken);
+        
+        // Update UI
+        authButton.disabled = false;
+        authButton.textContent = 'Re-Authenticate with GitHub';
+        logoutButton.style.display = 'block';
+        workflowButton.disabled = false;
+        
+        // Clear previous messages and show success
+        authStatus.innerHTML = '';
+        appendAuthMessage('🎉 Authentication successful! You can now trigger workflows.', false);
+        authStatus.className = 'status-success';
+        
+        // Verify token permissions
+        verifyTokenPermissions();
+      }
+      
+      /**
+       * Log out by removing the stored token
+       */
+      function logOut() {
+        localStorage.removeItem('github_token');
+        accessToken = '';
+        
+        // Reset UI
+        authButton.textContent = 'Authenticate with GitHub';
+        logoutButton.style.display = 'none';
+        workflowButton.disabled = true;
+        
+        // Clear status
+        authStatus.innerHTML = '';
+        authStatus.className = '';
+        appendAuthMessage('✅ Logged out successfully', false);
+      }
+      
+      /**
+       * Verify that the token has the required permissions
+       */
+      function verifyTokenPermissions() {
+        // Check if the token is valid by getting user info via proxy
+        fetch(`${PROXY_BASE_URL}/api/user`, {
+          headers: {
+            'Authorization': `token ${accessToken}`
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Authentication failed: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.login) {
+            appendAuthMessage(`👤 Authenticated as: ${data.login}`, false);
+            
+            // Now check if we can access the workflow endpoint
+            return fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/workflows`, {
+              headers: {
+                'Authorization': `token ${accessToken}`
+              }
+            });
+          } else {
+            throw new Error('Could not retrieve user information');
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            if (response.status === 403) {
+              throw new Error('Your token does not have the workflow permission. Please re-authenticate.');
+            }
+            throw new Error(`Failed to access workflows: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          appendAuthMessage('✅ Token verified with workflow access permissions.', false);
+        })
+        .catch(error => {
+          console.error('Error verifying token:', error);
+          appendAuthMessage(`❌ Error: ${error.message}`, true);
+          
+          if (error.message.includes('401') || error.message.includes('403')) {
+            // Reset authentication state on error
+            accessToken = '';
+            localStorage.removeItem('github_token');
+            
+            // Update UI to allow re-authentication
+            authButton.disabled = false;
+            authButton.textContent = 'Authenticate with GitHub';
+            logoutButton.style.display = 'none';
+            workflowButton.disabled = true;
+          }
+        });
+      }
+      
+      /**
+       * Trigger the GitHub workflow via proxy
+       */
+      function triggerWorkflow() {
+        const button = workflowButton;
+        const statusEl = workflowStatus;
+        const logsEl = workflowLogs;
+        
+        // Check if we have a token
+        if (!accessToken) {
+          appendLog('Error: No authentication token available', true);
+          return;
+        }
+        
+        // Prevent multiple clicks
+        if (button.classList.contains('running')) {
+          return;
+        }
+        
+        // Clear previous state classes
+        button.classList.remove('success', 'failed');
+        statusEl.classList.remove('status-success', 'status-failed');
+        statusEl.innerHTML = '';
+        
+        // Update button state to "running"
+        button.classList.add('running');
+        button.textContent = 'Running Workflow...';
+        
+        // Show status with running indicator
+        const statusText = document.createElement('div');
+        statusText.textContent = 'Workflow in progress. Please wait...';
+        statusEl.appendChild(statusText);
+        statusEl.classList.add('status-running');
+        
+        // Show logs panel
+        logsEl.classList.add('show');
+        logsEl.innerHTML = '';
+        
+        // Log initial action
+        appendLog('Attempting to trigger GitHub workflow: ' + workflowId);
+        appendLog(`Repository: ${repoOwner}/${repoName}`);
+        
+        // Call GitHub API via proxy to trigger the workflow
+        triggerGitHubWorkflow()
+          .then(data => {
+            if (data.success) {
+              handleWorkflowStarted(data);
+              
+              // Poll for workflow completion
+              if (data.runId) {
+                pollWorkflowStatus(data.runId);
+              }
+            } else {
+              handleWorkflowFailed(data.error);
+            }
+          })
+          .catch(error => {
+            handleWorkflowFailed(error.message || 'Failed to trigger workflow');
+          });
+      }
+      
+      /**
+       * Trigger the GitHub workflow via proxy API
+       */
+      async function triggerGitHubWorkflow() {
+        try {
+          appendLog('Dispatching workflow run request via proxy');
+          
+          // Make the API call via proxy to trigger the workflow
+          const response = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/workflows/${workflowId}/dispatches`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `token ${accessToken}`
+            },
+            body: JSON.stringify({
+              ref: 'main', // or whatever branch you want to run the workflow on
+              inputs: {} // Any input parameters your workflow accepts
+            })
+          });
+          
+          if (response.status === 204 || response.ok) {
+            appendLog('Workflow dispatch received by GitHub');
+            
+            // Get the run ID by querying recent workflow runs
+            const runsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/workflows/${workflowId}/runs?per_page=1`, {
+              headers: {
+                'Authorization': `token ${accessToken}`
+              }
+            });
+            
+            if (!runsResponse.ok) {
+              throw new Error(`GitHub API returned ${runsResponse.status}: ${await runsResponse.text()}`);
+            }
+            
+            const runsData = await runsResponse.json();
+            if (runsData.workflow_runs && runsData.workflow_runs.length > 0) {
+              const runId = runsData.workflow_runs[0].id;
+              appendLog(`Workflow run ID: ${runId}`);
+              return {
+                success: true,
+                runId: runId,
+                url: runsData.workflow_runs[0].html_url
+              };
+            }
+            
+            // If we couldn't get the run ID, still return success
+            appendLog('Workflow triggered, but could not retrieve run ID');
+            return { 
+              success: true,
+              url: `https://github.com/${repoOwner}/${repoName}/actions`
+            };
+          } else {
+            let errorMessage = `GitHub API returned status ${response.status}`;
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.message || errorMessage;
+            } catch (e) {
+              // Ignore JSON parsing errors
+            }
+            throw new Error(errorMessage);
+          }
+        } catch (error) {
+          console.error('Error triggering workflow:', error);
+          
+          let errorMessage = error.message || 'Failed to trigger workflow';
+          
+          // Handle token expiration
+          if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+            localStorage.removeItem('github_token');
+            accessToken = '';
+            workflowButton.disabled = true;
+            errorMessage = 'Authentication expired or invalid. Please re-authenticate.';
+          }
+          
+          return { 
+            success: false, 
+            error: errorMessage
+          };
+        }
+      }
+      
+      /**
+       * Handle successful workflow start
+       */
+      function handleWorkflowStarted(data) {
+        appendLog('Workflow run started successfully');
+        
+        if (data.runId) {
+          appendLog(`Run ID: ${data.runId}`);
+        }
+        
+        if (data.url) {
+          const runUrl = data.url;
+          appendLog(`View run at: ${runUrl}`);
+          
+          // Add a link to the workflow run
+          const linkContainer = document.createElement('div');
+          linkContainer.style.marginTop = '10px';
+          
+          const link = document.createElement('a');
+          link.href = runUrl;
+          link.target = '_blank';
+          link.textContent = 'Open Workflow Run';
+          link.style.color = '#2196F3';
+          
+          linkContainer.appendChild(link);
+          workflowStatus.appendChild(linkContainer);
+        }
+      }
+      
+      /**
+       * Poll for workflow completion via proxy
+       */
+      function pollWorkflowStatus(runId) {
+        appendLog('Checking workflow status...');
+        
+        // If we don't have a run ID, we can't poll for status
+        if (!runId) {
+          appendLog('No run ID available, cannot poll for status');
+          appendLog('Please check GitHub Actions directly for workflow status');
+          
+          workflowButton.classList.remove('running');
+          workflowButton.textContent = 'Trigger Workflow';
+          
+          workflowStatus.classList.remove('status-running');
+          return;
+        }
+        
+        let pollCount = 0;
+        const maxPolls = 30; // Maximum number of status checks (with 2s delay = 1 minute max)
+        
+        // Function to check workflow status
+        function checkStatus() {
+          fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
+            headers: {
+              'Authorization': `token ${accessToken}`
+            }
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`GitHub API returned ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            const status = data.status; // queued, in_progress, completed
+            const conclusion = data.conclusion; // success, failure, cancelled, etc.
+            
+            appendLog(`Current status: ${status}${conclusion ? ', conclusion: ' + conclusion : ''}`);
+            
+            if (status === 'completed') {
+              // Workflow has finished
+              const success = conclusion === 'success';
+              
+              if (success) {
+                // Update to success state
+                appendLog('Workflow completed successfully!');
+                
+                workflowButton.classList.remove('running');
+                workflowButton.classList.add('success');
+                workflowButton.textContent = 'Workflow Completed';
+                
+                workflowStatus.classList.remove('status-running');
+                workflowStatus.classList.add('status-success');
+                
+                const statusText = document.createElement('div');
+                statusText.textContent = 'Workflow completed successfully!';
+                workflowStatus.appendChild(statusText);
+                
+                // Reset button after 5 seconds
+                setTimeout(function() {
+                  workflowButton.classList.remove('success');
+                  workflowButton.textContent = 'Trigger Workflow';
+                }, 5000);
+              } else {
+                // Update to failure state
+                appendLog(`Workflow failed with conclusion: ${conclusion}`, true);
+                
+                workflowButton.classList.remove('running');
+                workflowButton.classList.add('failed');
+                workflowButton.textContent = 'Workflow Failed';
+                
+                workflowStatus.classList.remove('status-running');
+                workflowStatus.classList.add('status-failed');
+                
+                const statusText = document.createElement('div');
+                statusText.textContent = `Workflow failed with conclusion: ${conclusion}`;
+                workflowStatus.appendChild(statusText);
+                
+                // Reset button after 5 seconds
+                setTimeout(function() {
+                  workflowButton.classList.remove('failed');
+                  workflowButton.textContent = 'Trigger Workflow';
+                }, 5000);
+              }
+              
+              // Workflow is complete, no need to poll again
+              return;
+            } else if (pollCount >= maxPolls) {
+              // We've polled too many times, stop polling
+              appendLog('Exceeded maximum polling attempts. Please check GitHub directly for status.', true);
+              
+              // Reset button
+              workflowButton.classList.remove('running');
+              workflowButton.textContent = 'Trigger Workflow';
+              return;
+            }
+            
+            // Continue polling
+            pollCount++;
+            setTimeout(checkStatus, 2000); // Poll every 2 seconds
+          })
+          .catch(error => {
+            appendLog(`Error checking workflow status: ${error.message}`, true);
+            
+            // On error, stop polling and reset the button
+            workflowButton.classList.remove('running');
+            workflowButton.textContent = 'Trigger Workflow';
+          });
+        }
+        
+        // Start polling
+        checkStatus();
+      }
+      
+      /**
+       * Handle workflow failure
+       */
+      function handleWorkflowFailed(errorMessage) {
+        appendLog(`Error: ${errorMessage}`, true);
+        
+        workflowButton.classList.remove('running');
+        workflowButton.classList.add('failed');
+        workflowButton.textContent = 'Workflow Failed';
+        
+        workflowStatus.classList.remove('status-running');
+        workflowStatus.classList.add('status-failed');
+        
+        const statusText = document.createElement('div');
+        statusText.textContent = `Failed to trigger workflow: ${errorMessage}`;
+        workflowStatus.innerHTML = '';
+        workflowStatus.appendChild(statusText);
+        
+        // Reset button after 5 seconds
+        setTimeout(function() {
+          workflowButton.classList.remove('failed');
+          workflowButton.textContent = 'Trigger Workflow';
+          workflowStatus.classList.remove('status-failed');
+          workflowStatus.innerHTML = '';
+        }, 5000);
+      }
+      
+      /**
+       * Append an authentication message to the auth status element
+       */
+      function appendAuthMessage(message, isError) {
+        const messageEl = document.createElement('div');
+        messageEl.textContent = message;
+        messageEl.style.padding = '5px 0';
+        messageEl.style.lineHeight = '1.4';
+        
+        if (isError) {
+          messageEl.style.color = '#F44336';
+          messageEl.style.fontWeight = 'bold';
+        } else if (message.includes('✅') || message.includes('🎉')) {
+          messageEl.style.color = '#28a745';
+          messageEl.style.fontWeight = 'bold';
+        } else if (message.includes('🔄') || message.includes('⏳')) {
+          messageEl.style.color = '#FFC107';
+        }
+        
+        authStatus.appendChild(messageEl);
+      }
+      
+      /**
+       * Append a log entry with timestamp to the logs panel
+       */
+      function appendLog(message, isError = false) {
+        const now = new Date();
+        const timestamp = now.toLocaleTimeString();
+        
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry';
+        
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'timestamp';
+        timeSpan.textContent = `[${timestamp}] `;
+        
+        logEntry.appendChild(timeSpan);
+        
+        const messageText = document.createTextNode(message);
+        logEntry.appendChild(messageText);
+        
+        if (isError) {
+          logEntry.style.color = '#FF8A80';
+        }
+        
+        workflowLogs.appendChild(logEntry);
+        workflowLogs.scrollTop = workflowLogs.scrollHeight;
+      }
+    });
+  </script>
+</body>
+
+</html>
