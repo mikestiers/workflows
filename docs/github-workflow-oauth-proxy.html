@@ -866,10 +866,9 @@
             );            if (resourceGroupArtifact) {
               appendLog(`📦 Found resource group artifact: ${resourceGroupArtifact.name}`);
               displayResourceGroupArtifactInfo(resourceGroupArtifact);
-              
-              // Since artifacts contain the complete data, let's show a message about this
+                // Since artifacts contain the complete data, let's show a message about this
               appendLog('✅ Complete resource group data is available in the artifact above');
-              appendLog('💡 Artifact contains both JSON and text format data');
+              appendLog('💡 Artifact contains JSON data (note: GitHub always packages artifacts as ZIP files)');
               
               // Skip log parsing since we have artifacts - return early
               appendLog('🎯 Resource group data successfully located in artifacts');
@@ -1396,7 +1395,7 @@
             <h4 style="margin-top: 0; color: #2e7d32;">✅ Complete Data Available for Download</h4>
             <p><strong>Artifact Name:</strong> ${artifact.name}</p>
             <p><strong>File Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
-            <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>            <p><strong>Contains:</strong> Complete JSON resource group data</p>
+            <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>            <p><strong>Contains:</strong> JSON file in ZIP archive (GitHub always packages artifacts as ZIP)</p>
           </div>
         `;
         
@@ -1407,9 +1406,8 @@
           <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 10px 0;">
             <ol style="margin: 0; padding-left: 20px;">
               <li>Click the <strong>"Open Workflow Run"</strong> link above</li>
-              <li>Scroll down to the <strong>"Artifacts"</strong> section on the GitHub page</li>
-              <li>Click on <strong>"${artifact.name}"</strong> to download the JSON file directly</li>
-              <li>The file contains complete resource group data including:
+              <li>Scroll down to the <strong>"Artifacts"</strong> section on the GitHub page</li>              <li>Click on <strong>"${artifact.name}"</strong> to download the ZIP file</li>
+              <li>Extract the ZIP file to find <code>resource-groups.json</code> with complete data including:
                 <ul style="margin-top: 5px;">
                   <li>Resource group names, locations, and states</li>
                   <li>Full Azure resource IDs and properties</li>
@@ -1418,7 +1416,7 @@
               </li>
             </ol>
             <p style="margin-top: 10px; color: #666; font-size: 14px;">
-              💡 <strong>Tip:</strong> Since this is a single JSON file, it downloads directly without ZIP compression, making it easier to use programmatically.
+              💡 <strong>Note:</strong> GitHub Actions always packages artifacts as ZIP files, even for single files. Extract the ZIP to access the JSON data.
             </p>
           </div>
         `;
@@ -1430,8 +1428,8 @@ Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB
 Created: ${new Date(artifact.created_at).toLocaleString()}
 Download URL: Available on GitHub Actions page
 
-The complete resource group data is available as a single JSON file download.
-This file contains the full Azure resource group information in JSON format.`;
+The complete resource group data is available as a ZIP file download containing the JSON data.
+GitHub Actions always packages artifacts as ZIP files, even for single files.`;
         
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth' });
