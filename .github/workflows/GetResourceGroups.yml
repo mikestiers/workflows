@@ -48,3 +48,14 @@ jobs:
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           echo "$RESOURCE_GROUPS_JSON" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          # Save JSON data to file for artifact upload
+          echo "$RESOURCE_GROUPS_JSON" > resource-groups.json
+          echo "💾 Saved resource groups data to resource-groups.json"
+
+      - name: Upload Resource Groups JSON as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-resource-groups
+          path: resource-groups.json
+          retention-days: 30
