@@ -154,11 +154,10 @@
 
 <body>
   <h1>GitHub Workflow with OAuth Proxy</h1>
-  
-  <div class="proxy-info">
+    <div class="proxy-info">
     <h3>🔧 Setup Instructions</h3>
     <p><strong>Step 1:</strong> Make sure the Python proxy server is running</p>
-    <p><strong>Step 2:</strong> Configure your GitHub OAuth App with callback URL: <code>https://github-oauth-proxy-2025.azurewebsites.net</code></p>
+    <p><strong>Step 2:</strong> Configure your GitHub OAuth App with callback URL: <code>https://github-oauth-proxy-2025.azurewebsites.net/oauth/callback</code></p>
     <p><strong>Step 3:</strong> Set your GitHub Client Secret in the proxy server</p>
   </div>
 
@@ -218,8 +217,7 @@
       logoutButton.addEventListener('click', logOut);
       workflowButton.addEventListener('click', triggerWorkflow);      // Listen for OAuth callback messages
       window.addEventListener('message', handleOAuthMessage);
-      
-      /**
+        /**
        * Handle OAuth callback messages from popup window
        */
       function handleOAuthMessage(event) {
@@ -228,18 +226,21 @@
         console.log('Expected origin:', PROXY_BASE_URL);
         console.log('Message data:', event.data);
         
-        // Verify origin for security
-        if (event.origin !== PROXY_BASE_URL) {
+        // Verify origin for security (but be more lenient for Azure)
+        const expectedDomain = new URL(PROXY_BASE_URL).hostname;
+        const actualDomain = new URL(event.origin).hostname;
+        
+        if (actualDomain !== expectedDomain) {
           console.warn('Message from unexpected origin, ignoring');
+          console.warn('Expected domain:', expectedDomain, 'Actual domain:', actualDomain);
           return;
         }
-        
-        if (event.data.type === 'oauth_success') {
+          if (event.data.type === 'GITHUB_OAUTH_SUCCESS') {
           console.log('OAuth success message received');
           const token = event.data.access_token;
           appendAuthMessage('✅ Received access token from popup', false);
           handleAuthenticationSuccess(token);
-        } else if (event.data.type === 'oauth_error') {
+        } else if (event.data.type === 'GITHUB_OAUTH_ERROR') {
           console.log('OAuth error message received');
           appendAuthMessage(`❌ Authentication failed: ${event.data.error}`, true);
           authButton.disabled = false;
@@ -265,11 +266,10 @@
         authButton.disabled = true;
         authButton.textContent = 'Opening GitHub...';
         authenticationInProgress = true;
-        
-        appendAuthMessage('🔄 Initiating GitHub OAuth flow...', false);
+          appendAuthMessage('🔄 Initiating GitHub OAuth flow...', false);
         
         // Open OAuth popup
-        const oauthUrl = `${PROXY_BASE_URL}/oauth/login`;
+        const oauthUrl = `${PROXY_BASE_URL}/oauth/authorize`;
         const popup = window.open(
           oauthUrl, 
           'github_oauth', 
