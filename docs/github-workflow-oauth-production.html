@@ -176,20 +176,19 @@
 
 <body>
   <h1>GitHub Workflow with OAuth Proxy</h1>
-  
-  <div class="config-section">
+    <div class="config-section">
     <h3>⚙️ Configuration</h3>
     <p><strong>Backend Server URL:</strong></p>
-    <input type="text" id="proxyUrl" class="config-input" placeholder="https://your-python-server.herokuapp.com" value="">
-    <p><small>Enter the URL where your Python OAuth proxy server is deployed (e.g., Heroku, Railway, etc.)</small></p>
+    <input type="text" id="proxyUrl" class="config-input" placeholder="https://github-oauth-proxy-2025.azurewebsites.net" value="https://github-oauth-proxy-2025.azurewebsites.net">
+    <p><small>Using the deployed Azure OAuth proxy server. You can change this if you deployed to a different service.</small></p>
     <button id="saveConfig" class="workflow-button" style="width: auto; margin: 10px 0;">Save Configuration</button>
   </div>
   
   <div class="proxy-info">
-    <h3>🔧 Deployment Instructions</h3>
+    <h3>🔧 Deployment Status</h3>
     <p><strong>Frontend (GitHub Pages):</strong> This page is served from GitHub Pages</p>
-    <p><strong>Backend (Python Server):</strong> Deploy the Python OAuth proxy to a cloud service</p>
-    <p><strong>Recommended platforms:</strong> Heroku, Railway, Render, or any Python hosting service</p>
+    <p><strong>Backend (Azure App Service):</strong> Python OAuth proxy deployed to Azure</p>
+    <p><strong>Deployed URL:</strong> <a href="https://github-oauth-proxy-2025.azurewebsites.net" target="_blank">https://github-oauth-proxy-2025.azurewebsites.net</a></p>
   </div>
 
   <div class="workflow-section">
@@ -209,10 +208,9 @@
     <div id="workflow-logs" class="workflow-logs"></div>
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
+  <script>    document.addEventListener('DOMContentLoaded', function() {
       // Configuration management
-      let PROXY_BASE_URL = localStorage.getItem('proxy_base_url') || '';
+      let PROXY_BASE_URL = localStorage.getItem('proxy_base_url') || 'https://github-oauth-proxy-2025.azurewebsites.net';
       
       // GitHub repository details
       const repoOwner = 'mikestiers';
@@ -303,13 +301,12 @@
           console.warn('Message from unexpected origin, ignoring');
           return;
         }
-        
-        if (event.data.type === 'oauth_success') {
+          if (event.data.type === 'GITHUB_OAUTH_SUCCESS') {
           console.log('OAuth success message received');
           const token = event.data.access_token;
           appendAuthMessage('✅ Received access token from popup', false);
           handleAuthenticationSuccess(token);
-        } else if (event.data.type === 'oauth_error') {
+        } else if (event.data.type === 'GITHUB_OAUTH_ERROR') {
           console.log('OAuth error message received');
           appendAuthMessage(`❌ Authentication failed: ${event.data.error}`, true);
           authButton.disabled = false;
@@ -343,9 +340,8 @@
         authenticationInProgress = true;
         
         appendAuthMessage('🔄 Initiating GitHub OAuth flow...', false);
-        
-        // Open OAuth popup
-        const oauthUrl = `${PROXY_BASE_URL}/oauth/login`;
+          // Open OAuth popup
+        const oauthUrl = `${PROXY_BASE_URL}/oauth/authorize`;
         const popup = window.open(
           oauthUrl, 
           'github_oauth', 
