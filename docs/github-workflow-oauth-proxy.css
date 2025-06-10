@@ -1,0 +1,146 @@
+/* GitHub Workflow OAuth Proxy Styles */
+
+body {
+  font-family: Arial, sans-serif;
+  max-width: 650px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.workflow-section {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.workflow-button {
+  background-color: #2196F3;
+  color: white;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  width: 200px;
+  margin: 20px 0;
+  transition: background-color 0.3s;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.auth-button {
+  background-color: #28a745;
+}
+
+.workflow-button.running {
+  background-color: #FFC107;
+  cursor: wait;
+  position: relative;
+}
+
+.workflow-button.success {
+  background-color: #4CAF50;
+}
+
+.workflow-button.failed {
+  background-color: #F44336;
+}
+
+.workflow-button:hover {
+  opacity: 0.9;
+}
+
+.workflow-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.workflow-button.running::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  width: 0%;
+  background-color: rgba(255, 255, 255, 0.7);
+  animation: progress 2s infinite linear;
+}
+
+@keyframes progress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+#workflow-status, #auth-status {
+  margin-top: 15px;
+  padding: 10px;
+  min-height: 20px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.status-running {
+  background-color: #FFF8E1;
+  border-left: 4px solid #FFC107;
+  padding-left: 10px;
+}
+
+.status-success {
+  background-color: #E8F5E9;
+  border-left: 4px solid #4CAF50;
+  padding-left: 10px;
+}
+
+.status-failed {
+  background-color: #FFEBEE;
+  border-left: 4px solid #F44336;
+  padding-left: 10px;
+}
+
+.workflow-logs {
+  font-family: monospace;
+  background-color: #263238;
+  color: #ECEFF1;
+  padding: 15px;
+  border-radius: 4px;
+  margin-top: 15px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: none;
+}
+
+.workflow-logs.show {
+  display: block;
+}
+
+.log-entry {
+  margin: 5px 0;
+  line-height: 1.5;
+}
+
+.timestamp {
+  color: #90A4AE;
+}
+
+.proxy-info {
+  background-color: #e3f2fd;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-left: 4px solid #2196F3;
+}
+
+.proxy-info h3 {
+  margin-top: 0;
+  color: #1976D2;
+}
+
+.hidden {
+  display: none;
+}
