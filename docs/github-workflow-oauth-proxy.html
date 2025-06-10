@@ -781,8 +781,7 @@
           }
           
           appendLog(`✅ Found resource group job with status: ${resourceGroupJob.status}`);
-          
-          // Get workflow run details to access outputs
+            // Get workflow run details to access outputs
           const runResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
             headers: {
               'Authorization': `token ${accessToken}`
@@ -794,6 +793,46 @@
           }
           
           const runData = await runResponse.json();
+          
+          // Try to use job outputs first (these should work now)
+          if (runData.conclusion === 'success') {
+            appendLog('🔍 Checking job outputs for resource group data...');
+            
+            // Try to get outputs from the run
+            const jobOutputs = resourceGroupJob.outputs || {};
+            const runOutputs = runData.outputs || {};
+            
+            appendLog(`📊 Available outputs: ${Object.keys(runOutputs).join(', ')}`);
+            
+            if (runOutputs['resource-group-count'] || runOutputs['resource-group-list']) {
+              const count = parseInt(runOutputs['resource-group-count'] || '0');
+              const listText = runOutputs['resource-group-list'] || '';
+              
+              appendLog(`📋 Found outputs - Count: ${count}, List length: ${listText.length}`);
+              
+              // Parse the list text into resource group objects
+              const resourceGroups = [];
+              if (listText) {
+                const lines = listText.split('\n');
+                lines.forEach(line => {
+                  const match = line.match(/- (.+) \(([^)]+)\) - (.+)/);
+                  if (match) {
+                    resourceGroups.push({
+                      name: match[1],
+                      location: match[2],
+                      state: match[3]
+                    });
+                  }
+                });
+              }
+              
+              if (resourceGroups.length > 0) {
+                appendLog(`✅ Parsed ${resourceGroups.length} resource groups from outputs`);
+                displayResourceGroupResults(resourceGroups, count, null);
+                return; // Success, no need to parse logs
+              }
+            }
+          }
             // Try to get artifacts which contain the resource group data
           const artifactsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/artifacts`, {
             headers: {
@@ -812,8 +851,8 @@
               displayResourceGroupArtifactInfo(resourceGroupArtifact);
             }
           }
-          
-          // Parse logs for resource group information (primary method since outputs may be blocked)
+            // Parse logs for resource group information (fallback method)
+          appendLog('🔄 Falling back to parsing workflow logs...');
           const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`, {
             headers: {
               'Authorization': `token ${accessToken}`
@@ -822,9 +861,11 @@
           
           if (logsResponse.ok) {
             const logsText = await logsResponse.text();
+            appendLog('📝 Successfully fetched workflow logs');
             parseResourceGroupLogs(logsText);
           } else {
-            appendLog('⚠️ Could not fetch workflow logs for parsing', true);
+            appendLog(`❌ Could not fetch workflow logs (status: ${logsResponse.status})`, true);
+            appendLog('💡 Resource group data is available in the artifacts for download', false);
           }
           
         } catch (error) {
