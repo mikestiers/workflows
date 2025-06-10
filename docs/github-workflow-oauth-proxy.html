@@ -183,8 +183,7 @@
     <h2>🔧 Troubleshooting</h2>
     <details>
       <summary style="cursor: pointer; font-weight: bold;">Common Issues & Solutions</summary>
-      <div style="margin-top: 10px;">
-        <h4>❌ "403 Forbidden" Error When Fetching Logs</h4>
+      <div style="margin-top: 10px;">        <h4>❌ "403 Forbidden" Error When Fetching Logs</h4>
         <p><strong>Cause:</strong> The GitHub token may not have sufficient permissions to read workflow logs.</p>
         <p><strong>Solutions:</strong></p>
         <ul>
@@ -192,6 +191,16 @@
           <li>For private repositories, ensure you have repository access</li>
           <li>The workflow logs may have expired (GitHub keeps them for 90 days)</li>
           <li>Use the artifacts download feature instead - data is always available there</li>
+        </ul>
+        
+        <h4>🗜️ Compressed/Garbled Log Content</h4>
+        <p><strong>Cause:</strong> GitHub Actions logs are often gzip compressed.</p>
+        <p><strong>Solutions:</strong></p>
+        <ul>
+          <li>The page attempts automatic decompression for modern browsers</li>
+          <li>If decompression fails, the complete data is available in artifacts</li>
+          <li>Download artifacts for guaranteed access to readable data</li>
+          <li>Artifacts contain both JSON and human-readable text formats</li>
         </ul>
         
         <h4>⚠️ No Resource Groups Displayed</h4>
@@ -849,10 +858,23 @@
             const resourceGroupArtifact = artifactsData.artifacts.find(artifact => 
               artifact.name.includes('azure-resource-groups')
             );
-            
-            if (resourceGroupArtifact) {
+              if (resourceGroupArtifact) {
               appendLog(`📦 Found resource group artifact: ${resourceGroupArtifact.name}`);
               displayResourceGroupArtifactInfo(resourceGroupArtifact);
+              
+              // Since artifacts contain the complete data, let's show a message about this
+              appendLog('✅ Complete resource group data is available in the artifact above');
+              appendLog('💡 Artifact contains both JSON and text format data');
+              
+              // Create a mock display to show that data is available
+              const mockDisplayData = [{
+                name: 'Resource groups available in artifact',
+                location: 'Download from link above',
+                state: 'Data available'
+              }];
+              displayResourceGroupResults(mockDisplayData, 1, null);
+            } else {
+              appendLog('⚠️ No resource group artifacts found');
             }
           }          // Parse logs for resource group information (fallback method)
           appendLog('🔄 Attempting to fetch workflow logs...');
@@ -871,8 +893,7 @@
           for (const endpoint of logEndpoints) {
             try {
               appendLog(`📝 Trying logs endpoint: ${endpoint.split('/').slice(-2).join('/')}`);
-              
-              const logsResponse = await fetch(endpoint, {
+                const logsResponse = await fetch(endpoint, {
                 headers: {
                   'Authorization': `token ${accessToken}`,
                   'Accept': 'application/vnd.github.v3+json'
@@ -880,7 +901,58 @@
               });
               
               if (logsResponse.ok) {
-                logsText = await logsResponse.text();
+                // GitHub Actions logs are often gzip compressed
+                const contentEncoding = logsResponse.headers.get('content-encoding');
+                appendLog(`📝 Content encoding: ${contentEncoding || 'none'}`);
+                
+                // Get the response as array buffer to handle potential compression
+                const arrayBuffer = await logsResponse.arrayBuffer();
+                
+                let logsTextTemp;
+                if (contentEncoding === 'gzip' || endpoint.includes('/logs')) {
+                  // Try to decompress if it's gzip or if it's a logs endpoint
+                  try {
+                    // Check if the data looks like gzip (starts with 0x1f 0x8b)
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    if (uint8Array[0] === 0x1f && uint8Array[1] === 0x8b) {
+                      appendLog('📝 Detected gzip compressed logs, attempting to decompress...');
+                      
+                      // Try to use DecompressionStream if available (modern browsers)
+                      if (typeof DecompressionStream !== 'undefined') {
+                        const decompressedStream = new DecompressionStream('gzip');
+                        const response = new Response(arrayBuffer);
+                        const decompressedResponse = response.body.pipeThrough(decompressedStream);
+                        const decompressedBuffer = await new Response(decompressedResponse).arrayBuffer();
+                        logsTextTemp = new TextDecoder().decode(decompressedBuffer);
+                        appendLog('📝 Successfully decompressed logs using DecompressionStream');
+                      } else {
+                        appendLog('⚠️ Browser does not support DecompressionStream, trying alternative...');
+                        // Fallback: try to decode as text anyway (might work for some logs)
+                        logsTextTemp = new TextDecoder('utf-8', { ignoreBOM: true }).decode(arrayBuffer);
+                      }
+                    } else {
+                      // Not gzip, decode as regular text
+                      logsTextTemp = new TextDecoder().decode(arrayBuffer);
+                    }
+                  } catch (decompressionError) {
+                    appendLog(`⚠️ Decompression failed: ${decompressionError.message}`);
+                    // Fallback to regular text decoding
+                    logsTextTemp = new TextDecoder('utf-8', { ignoreBOM: true }).decode(arrayBuffer);
+                  }
+                } else {
+                  // Regular text response
+                  logsTextTemp = new TextDecoder().decode(arrayBuffer);
+                }
+                
+                // Check if the logs look reasonable (not binary garbage)
+                const isValidText = /^[\x20-\x7E\s]*$/.test(logsTextTemp.substring(0, 500));
+                if (!isValidText && logsTextTemp.length > 100) {
+                  appendLog('⚠️ Logs appear to be compressed/binary, but decompression failed');
+                  appendLog('💡 Try downloading the logs manually from GitHub Actions page');
+                  continue; // Try next endpoint
+                }
+                
+                logsText = logsTextTemp;
                 appendLog('📝 Successfully fetched workflow logs');
                 appendLog(`📄 Log size: ${logsText.length} characters`);
                 logsFetched = true;
@@ -1132,8 +1204,7 @@
         resultsSection.scrollIntoView({ behavior: 'smooth' });
         
         appendLog(`✅ Resource group results displayed successfully`);
-      }
-        /**
+      }      /**
        * Display artifact information
        */
       function displayResourceGroupArtifactInfo(artifact) {
@@ -1141,27 +1212,58 @@
         appendLog(`📅 Created: ${new Date(artifact.created_at).toLocaleString()}`);
         appendLog(`💾 Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB`);
         
-        // Add download link info
+        // Show the results section and add prominent artifact info
         const resultsSection = document.getElementById('resource-group-results');
-        if (resultsSection.style.display === 'none') {
-          resultsSection.style.display = 'block';
-        }
+        resultsSection.style.display = 'block';
         
-        const downloadInfo = document.createElement('div');
-        downloadInfo.style.marginTop = '10px';
-        downloadInfo.style.padding = '10px';
-        downloadInfo.style.backgroundColor = '#e3f2fd';
-        downloadInfo.style.borderRadius = '4px';
-        downloadInfo.innerHTML = `
-          <h4>📦 Download Resource Group Data</h4>
-          <p><strong>Artifact:</strong> ${artifact.name}</p>
-          <p><strong>Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
-          <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>
-          <p><small>Note: Artifacts can be downloaded from the GitHub Actions page for this workflow run.</small></p>
+        // Update the count section to show artifact info
+        const countElement = document.getElementById('resource-group-count');
+        countElement.innerHTML = `
+          <h3>📦 Azure Resource Group Data Available in Artifacts</h3>
+          <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #4caf50; margin: 10px 0;">
+            <h4 style="margin-top: 0; color: #2e7d32;">✅ Complete Data Available for Download</h4>
+            <p><strong>Artifact Name:</strong> ${artifact.name}</p>
+            <p><strong>File Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
+            <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>
+            <p><strong>Contains:</strong> JSON data and human-readable text format</p>
+          </div>
         `;
         
-        const resourceGroupData = document.getElementById('resource-group-data');
-        resourceGroupData.appendChild(downloadInfo);
+        // Add download instructions
+        const listElement = document.getElementById('resource-group-list');
+        listElement.innerHTML = `
+          <h4>📥 How to Download Resource Group Data:</h4>
+          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 10px 0;">
+            <ol style="margin: 0; padding-left: 20px;">
+              <li>Click the <strong>"Open Workflow Run"</strong> link above</li>
+              <li>Scroll down to the <strong>"Artifacts"</strong> section on the GitHub page</li>
+              <li>Click on <strong>"${artifact.name}"</strong> to download the ZIP file</li>
+              <li>Extract the ZIP to find:
+                <ul style="margin-top: 5px;">
+                  <li><code>resource-groups.json</code> - Complete JSON data</li>
+                  <li><code>resource-groups.txt</code> - Human-readable format</li>
+                </ul>
+              </li>
+            </ol>
+            <p style="margin-top: 10px; color: #666; font-size: 14px;">
+              💡 <strong>Tip:</strong> The JSON file contains complete resource group information including IDs, properties, and metadata.
+            </p>
+          </div>
+        `;
+        
+        // Show artifact info in JSON section too
+        const jsonElement = document.getElementById('resource-group-json');
+        jsonElement.textContent = `Artifact Information:
+Name: ${artifact.name}
+Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB
+Created: ${new Date(artifact.created_at).toLocaleString()}
+Download URL: Available on GitHub Actions page
+
+The complete resource group data is available in the downloadable artifact above.
+This includes both JSON format and human-readable text format.`;
+        
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
       }
     });
   </script>
