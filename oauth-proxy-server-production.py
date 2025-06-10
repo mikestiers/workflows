@@ -435,7 +435,6 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
         }
         
         self.wfile.write(json.dumps(error_response).encode())
-    
     def get_base_url(self):
         """Get the base URL of the server"""
         # In production, this should be your deployed server URL
@@ -443,7 +442,8 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
         host = self.headers.get('Host', f'localhost:{PORT}')
         
         # Check if we're running on HTTPS (common for cloud deployments)
-        if 'herokuapp.com' in host or 'railway.app' in host or 'render.com' in host:
+        if ('herokuapp.com' in host or 'railway.app' in host or 'render.com' in host or 
+            'azurewebsites.net' in host or 'vercel.app' in host or 'netlify.app' in host):
             return f'https://{host}'
         else:
             return f'http://{host}'
