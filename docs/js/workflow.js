@@ -10,6 +10,9 @@ export class WorkflowManager {
     this.workflowButton = null;
     this.workflowStatus = null;
     this.workflowLogs = null;
+    
+    // Track workflow timing
+    this.workflowTriggerTime = null;
   }
 
   /**
@@ -51,10 +54,12 @@ export class WorkflowManager {
     // Show logs panel
     this.workflowLogs.classList.add('show');
     this.workflowLogs.innerHTML = '';
-    
-    // Log initial action
+      // Log initial action
     appendLog(this.workflowLogs, 'Attempting to trigger GitHub workflow: ' + CONFIG.GITHUB.WORKFLOW_ID);
     appendLog(this.workflowLogs, `Repository: ${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}`);
+    
+    // Store the trigger time
+    this.workflowTriggerTime = new Date();
     
     try {
       // Call GitHub API via proxy to trigger the workflow
@@ -104,39 +109,32 @@ export class WorkflowManager {
           inputs: {} // Any input parameters your workflow accepts
         })
       });
-      
-      if (response.status === 204 || response.ok) {
+        if (response.status === 204 || response.ok) {
         appendLog(this.workflowLogs, 'Workflow dispatch received by GitHub');
+          // Wait a moment for GitHub to register the new workflow run
+        appendLog(this.workflowLogs, 'Waiting for new workflow run to be registered...');
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
         
-        // Get the run ID by querying recent workflow runs
-        const runsResponse = await fetch(`${CONFIG.PROXY_BASE_URL}/api/repos/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions/workflows/${CONFIG.GITHUB.WORKFLOW_ID}/runs?per_page=1`, {
-          headers: {
-            'Authorization': `token ${this.authManager.getAccessToken()}`
-          }
-        });
+        // Try to find the new workflow run with retries
+        const runId = await this.findNewWorkflowRunWithRetry();
         
-        if (!runsResponse.ok) {
-          throw new Error(`GitHub API returned ${runsResponse.status}: ${await runsResponse.text()}`);
-        }
-        
-        const runsData = await runsResponse.json();
-        if (runsData.workflow_runs && runsData.workflow_runs.length > 0) {
-          const runId = runsData.workflow_runs[0].id;
-          appendLog(this.workflowLogs, `Workflow run ID: ${runId}`);
+        if (runId) {
+          appendLog(this.workflowLogs, `New workflow run ID: ${runId}`);
+          const runUrl = `https://github.com/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions/runs/${runId}`;
           return {
             success: true,
             runId: runId,
-            url: runsData.workflow_runs[0].html_url
+            url: runUrl
           };
         }
         
         // If we couldn't get the run ID, still return success
-        appendLog(this.workflowLogs, 'Workflow triggered, but could not retrieve run ID');
+        appendLog(this.workflowLogs, 'Workflow triggered, but could not retrieve new run ID');
         return { 
           success: true,
           url: `https://github.com/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions`
         };
-      } else {
+      }else {
         let errorMessage = `GitHub API returned status ${response.status}`;
         try {
           const errorData = await response.json();
@@ -533,5 +531,86 @@ export class WorkflowManager {
     
     // Display content
     jsonDiv.textContent = content;
+  }
+  /**
+   * Find the newly created workflow run
+   */
+  async findNewWorkflowRun() {
+    try {
+      // Get recent workflow runs
+      const runsResponse = await fetch(`${CONFIG.PROXY_BASE_URL}/api/repos/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions/workflows/${CONFIG.GITHUB.WORKFLOW_ID}/runs?per_page=10`, {
+        headers: {
+          'Authorization': `token ${this.authManager.getAccessToken()}`
+        }
+      });
+      
+      if (!runsResponse.ok) {
+        throw new Error(`GitHub API returned ${runsResponse.status}: ${await runsResponse.text()}`);
+      }
+      
+      const runsData = await runsResponse.json();
+      
+      if (!runsData.workflow_runs || runsData.workflow_runs.length === 0) {
+        return null;
+      }
+      
+      // Look for runs created after our trigger time
+      const potentialRuns = runsData.workflow_runs.filter(run => {
+        const runCreated = new Date(run.created_at);
+        const timeDiff = runCreated.getTime() - this.workflowTriggerTime.getTime();
+        
+        // Look for runs created within 10 seconds after trigger (allowing for clock differences)
+        return timeDiff >= -5000 && timeDiff <= 10000;
+      });
+      
+      if (potentialRuns.length > 0) {
+        // Prefer queued/in_progress runs from our potential matches
+        const newRun = potentialRuns.find(run => 
+          run.status === 'queued' || run.status === 'in_progress'
+        ) || potentialRuns[0]; // fallback to first match
+        
+        appendLog(this.workflowLogs, `Found matching run created at: ${new Date(newRun.created_at).toLocaleTimeString()}`);
+        return newRun.id;
+      }
+      
+      // Fallback: Look for the most recent queued or in_progress run
+      const activeRun = runsData.workflow_runs.find(run => 
+        run.status === 'queued' || run.status === 'in_progress'
+      );
+      
+      if (activeRun) {
+        appendLog(this.workflowLogs, 'Using most recent active run as fallback');
+        return activeRun.id;
+      }
+      
+      appendLog(this.workflowLogs, 'Could not identify the new workflow run', true);
+      return null;
+      
+    } catch (error) {
+      appendLog(this.workflowLogs, `Error finding new workflow run: ${error.message}`, true);      return null;
+    }
+  }
+
+  /**
+   * Find the newly created workflow run with retry logic
+   */
+  async findNewWorkflowRunWithRetry(maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      appendLog(this.workflowLogs, `Looking for new workflow run (attempt ${attempt}/${maxRetries})...`);
+      
+      const runId = await this.findNewWorkflowRun();
+      
+      if (runId) {
+        return runId;
+      }
+      
+      if (attempt < maxRetries) {
+        appendLog(this.workflowLogs, 'Run not found yet, waiting 2 seconds before retry...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    appendLog(this.workflowLogs, 'Could not find new workflow run after retries', true);
+    return null;
   }
 }
