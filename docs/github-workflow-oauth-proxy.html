@@ -167,7 +167,6 @@
     <button id="workflow-trigger" class="workflow-button" disabled>Get Azure Resource Groups</button>    <div id="workflow-status"></div>
     <div id="workflow-logs" class="workflow-logs"></div>
   </div>
-
   <div class="workflow-section" id="resource-group-results" style="display: none;">
     <h2>📋 Azure Resource Group Results</h2>
     <div id="resource-group-count"></div>
@@ -178,6 +177,42 @@
         <pre id="resource-group-json" style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;"></pre>
       </details>
     </div>
+  </div>
+
+  <div class="workflow-section">
+    <h2>🔧 Troubleshooting</h2>
+    <details>
+      <summary style="cursor: pointer; font-weight: bold;">Common Issues & Solutions</summary>
+      <div style="margin-top: 10px;">
+        <h4>❌ "403 Forbidden" Error When Fetching Logs</h4>
+        <p><strong>Cause:</strong> The GitHub token may not have sufficient permissions to read workflow logs.</p>
+        <p><strong>Solutions:</strong></p>
+        <ul>
+          <li>Ensure your token has the <code>actions:read</code> scope</li>
+          <li>For private repositories, ensure you have repository access</li>
+          <li>The workflow logs may have expired (GitHub keeps them for 90 days)</li>
+          <li>Use the artifacts download feature instead - data is always available there</li>
+        </ul>
+        
+        <h4>⚠️ No Resource Groups Displayed</h4>
+        <p><strong>Cause:</strong> Log parsing failed or no resource groups exist.</p>
+        <p><strong>Solutions:</strong></p>
+        <ul>
+          <li>Check the workflow logs manually on GitHub Actions page</li>
+          <li>Download the artifacts which contain the complete data</li>
+          <li>Verify your Azure credentials in the repository secrets</li>
+          <li>Check if you have any resource groups in your Azure subscription</li>
+        </ul>
+        
+        <h4>🔑 Authentication Issues</h4>
+        <p><strong>Solutions:</strong></p>
+        <ul>
+          <li>Re-authenticate with a fresh token</li>
+          <li>Ensure the token has <code>workflow</code> and <code>actions:read</code> permissions</li>
+          <li>Check that the repository is accessible with your account</li>
+        </ul>
+      </div>
+    </details>
   </div>
 
   <script>
@@ -378,9 +413,9 @@
             throw new Error(`Failed to access workflows: ${response.status}`);
           }
           return response.json();
-        })
-        .then(data => {
+        })        .then(data => {
           appendAuthMessage('✅ Token verified with workflow access permissions.', false);
+          appendAuthMessage('⚠️ Note: If you get "403 Forbidden" errors later, you may need additional permissions for private repositories or logs access.', false);
         })
         .catch(error => {
           console.error('Error verifying token:', error);
@@ -819,19 +854,50 @@
               appendLog(`📦 Found resource group artifact: ${resourceGroupArtifact.name}`);
               displayResourceGroupArtifactInfo(resourceGroupArtifact);
             }
-          }
-            // Parse logs for resource group information (fallback method)
-          appendLog('🔄 Falling back to parsing workflow logs...');
-          const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`, {
-            headers: {
-              'Authorization': `token ${accessToken}`
+          }          // Parse logs for resource group information (fallback method)
+          appendLog('🔄 Attempting to fetch workflow logs...');
+          
+          // Try different approaches to get the logs
+          const logEndpoints = [
+            // Try job logs first
+            `${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`,
+            // Try workflow run logs as backup
+            `${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/logs`
+          ];
+          
+          let logsText = null;
+          let logsFetched = false;
+          
+          for (const endpoint of logEndpoints) {
+            try {
+              appendLog(`📝 Trying logs endpoint: ${endpoint.split('/').slice(-2).join('/')}`);
+              
+              const logsResponse = await fetch(endpoint, {
+                headers: {
+                  'Authorization': `token ${accessToken}`,
+                  'Accept': 'application/vnd.github.v3+json'
+                }
+              });
+              
+              if (logsResponse.ok) {
+                logsText = await logsResponse.text();
+                appendLog('📝 Successfully fetched workflow logs');
+                appendLog(`📄 Log size: ${logsText.length} characters`);
+                logsFetched = true;
+                break;
+              } else if (logsResponse.status === 403) {
+                appendLog(`❌ Access denied (403) for ${endpoint.split('/').slice(-2).join('/')}`);
+                appendLog('⚠️ This may be due to insufficient token permissions or private repository settings');
+              } else {
+                appendLog(`❌ Failed to fetch from ${endpoint.split('/').slice(-2).join('/')} (status: ${logsResponse.status})`);
+              }
+              
+            } catch (error) {
+              appendLog(`❌ Error fetching from ${endpoint.split('/').slice(-2).join('/')}: ${error.message}`);
             }
-          });
-            if (logsResponse.ok) {
-            const logsText = await logsResponse.text();
-            appendLog('📝 Successfully fetched workflow logs');
-            appendLog(`📄 Log size: ${logsText.length} characters`);
-            
+          }
+          
+          if (logsFetched && logsText) {
             // Show a sample of the logs for debugging
             const logLines = logsText.split('\n');
             appendLog(`📄 Total log lines: ${logLines.length}`);
@@ -842,7 +908,8 @@
               line.includes('Found') ||
               line.includes('[') ||
               line.includes('- ') ||
-              line.includes('azure')
+              line.includes('azure') ||
+              line.includes('group list')
             ).slice(0, 5);
             
             if (relevantLines.length > 0) {
@@ -854,18 +921,22 @@
             
             parseResourceGroupLogs(logsText);
           } else {
-            appendLog(`❌ Could not fetch workflow logs (status: ${logsResponse.status})`, true);
-            appendLog('💡 Resource group data is available in the artifacts for download', false);
+            appendLog('❌ Could not access workflow logs from any endpoint', true);
+            appendLog('💡 This might be due to one of the following reasons:');
+            appendLog('   • Token needs "actions:read" permission scope');
+            appendLog('   • Repository is private and token lacks access');
+            appendLog('   • Workflow logs have expired or been deleted');
+            appendLog('');
+            appendLog('📦 Alternative: Resource group data is available in workflow artifacts');
+            appendLog('🔗 You can download the artifacts from the GitHub Actions page');
             
-            // Try to show what error we got
-            try {
-              const errorText = await logsResponse.text();
-              if (errorText) {
-                appendLog(`📄 Error response: ${errorText.substring(0, 200)}...`);
-              }
-            } catch (e) {
-              appendLog(`📄 Could not read error response: ${e.message}`);
-            }
+            // Show a helpful message in the UI even if we can't parse logs
+            const mockResourceGroups = [{
+              name: 'Unable to fetch logs',
+              location: 'Check artifacts',
+              state: 'Permission denied'
+            }];
+            displayResourceGroupResults(mockResourceGroups, 0, null);
           }
           
         } catch (error) {
