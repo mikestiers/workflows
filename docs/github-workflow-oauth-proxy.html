@@ -188,9 +188,9 @@
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
       const workflowId = 'root.yml';
-      
-      // Authentication state
+        // Authentication state
       let accessToken = '';
+      let authenticationInProgress = false;
       
       // Cache DOM elements
       const authButton = document.getElementById('auth-button');
@@ -216,19 +216,8 @@
       // Add event listeners
       authButton.addEventListener('click', startAuthentication);
       logoutButton.addEventListener('click', logOut);
-      workflowButton.addEventListener('click', triggerWorkflow);
-        // Listen for OAuth callback messages
+      workflowButton.addEventListener('click', triggerWorkflow);      // Listen for OAuth callback messages
       window.addEventListener('message', handleOAuthMessage);
-      
-      // Add additional debugging for message events
-      window.addEventListener('message', function(event) {
-        console.log('=== RAW MESSAGE EVENT ===');
-        console.log('Event:', event);
-        console.log('Origin:', event.origin);
-        console.log('Data:', event.data);
-        console.log('Source:', event.source);
-        console.log('========================');
-      });
       
       /**
        * Handle OAuth callback messages from popup window
@@ -272,10 +261,10 @@
         // Clear previous status
         authStatus.innerHTML = '';
         authStatus.className = '';
-        
-        // Update button state
+          // Update button state
         authButton.disabled = true;
         authButton.textContent = 'Opening GitHub...';
+        authenticationInProgress = true;
         
         appendAuthMessage('🔄 Initiating GitHub OAuth flow...', false);
         
@@ -292,28 +281,27 @@
           authButton.disabled = false;
           authButton.textContent = 'Authenticate with GitHub';
           return;
-        }
-        
-        appendAuthMessage('🔄 Complete authentication in the popup window...', false);
+        }        appendAuthMessage('🔄 Complete authentication in the popup window...', false);
         
         // Check if popup was closed without completing authentication
         const checkClosed = setInterval(() => {
-          if (popup.closed) {
+          if (popup.closed && authenticationInProgress) {
             clearInterval(checkClosed);
-            if (authButton.disabled && authButton.textContent === 'Opening GitHub...') {
-              appendAuthMessage('⚠️ Authentication window was closed', false);
-              authButton.disabled = false;
-              authButton.textContent = 'Authenticate with GitHub';
-            }
+            appendAuthMessage('⚠️ Authentication window was closed', false);
+            authButton.disabled = false;
+            authButton.textContent = 'Authenticate with GitHub';
+            authenticationInProgress = false;
           }
         }, 1000);
       }
       
       /**
        * Handle successful authentication
-       */
-      function handleAuthenticationSuccess(token) {
+       */      function handleAuthenticationSuccess(token) {
         console.log('🎉 Authentication successful, storing token');
+        
+        // Clear authentication state
+        authenticationInProgress = false;
         
         // Store the access token
         accessToken = token;
