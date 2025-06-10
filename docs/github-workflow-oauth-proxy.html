@@ -793,45 +793,14 @@
           }
           
           const runData = await runResponse.json();
-          
-          // Try to use job outputs first (these should work now)
+            // Check if we can access job outputs
           if (runData.conclusion === 'success') {
-            appendLog('🔍 Checking job outputs for resource group data...');
+            appendLog('🔍 Checking for resource group data...');
             
-            // Try to get outputs from the run
-            const jobOutputs = resourceGroupJob.outputs || {};
-            const runOutputs = runData.outputs || {};
-            
-            appendLog(`📊 Available outputs: ${Object.keys(runOutputs).join(', ')}`);
-            
-            if (runOutputs['resource-group-count'] || runOutputs['resource-group-list']) {
-              const count = parseInt(runOutputs['resource-group-count'] || '0');
-              const listText = runOutputs['resource-group-list'] || '';
-              
-              appendLog(`📋 Found outputs - Count: ${count}, List length: ${listText.length}`);
-              
-              // Parse the list text into resource group objects
-              const resourceGroups = [];
-              if (listText) {
-                const lines = listText.split('\n');
-                lines.forEach(line => {
-                  const match = line.match(/- (.+) \(([^)]+)\) - (.+)/);
-                  if (match) {
-                    resourceGroups.push({
-                      name: match[1],
-                      location: match[2],
-                      state: match[3]
-                    });
-                  }
-                });
-              }
-              
-              if (resourceGroups.length > 0) {
-                appendLog(`✅ Parsed ${resourceGroups.length} resource groups from outputs`);
-                displayResourceGroupResults(resourceGroups, count, null);
-                return; // Success, no need to parse logs
-              }
-            }
+            // GitHub Actions job outputs are not directly accessible from run API
+            // The outputs defined in the workflow are internal to GitHub Actions
+            // We need to parse the logs to extract the data
+            appendLog('📝 Job outputs are not accessible via API, proceeding to log parsing');
           }
             // Try to get artifacts which contain the resource group data
           const artifactsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/artifacts`, {
@@ -858,14 +827,45 @@
               'Authorization': `token ${accessToken}`
             }
           });
-          
-          if (logsResponse.ok) {
+            if (logsResponse.ok) {
             const logsText = await logsResponse.text();
             appendLog('📝 Successfully fetched workflow logs');
+            appendLog(`📄 Log size: ${logsText.length} characters`);
+            
+            // Show a sample of the logs for debugging
+            const logLines = logsText.split('\n');
+            appendLog(`📄 Total log lines: ${logLines.length}`);
+            
+            // Show first few lines that contain relevant information
+            const relevantLines = logLines.filter(line => 
+              line.includes('resource group') || 
+              line.includes('Found') ||
+              line.includes('[') ||
+              line.includes('- ') ||
+              line.includes('azure')
+            ).slice(0, 5);
+            
+            if (relevantLines.length > 0) {
+              appendLog(`📄 Sample relevant log lines:`);
+              relevantLines.forEach((line, idx) => {
+                appendLog(`  ${idx + 1}: ${line.trim()}`);
+              });
+            }
+            
             parseResourceGroupLogs(logsText);
           } else {
             appendLog(`❌ Could not fetch workflow logs (status: ${logsResponse.status})`, true);
             appendLog('💡 Resource group data is available in the artifacts for download', false);
+            
+            // Try to show what error we got
+            try {
+              const errorText = await logsResponse.text();
+              if (errorText) {
+                appendLog(`📄 Error response: ${errorText.substring(0, 200)}...`);
+              }
+            } catch (e) {
+              appendLog(`📄 Could not read error response: ${e.message}`);
+            }
           }
           
         } catch (error) {
@@ -883,10 +883,12 @@
           let resourceGroupCount = 0;
           let resourceGroups = [];
           let jsonData = null;
+          let currentJsonBuffer = '';
+          let insideJsonBlock = false;
           
           // Look for resource group information in the logs
           for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
+            const line = lines[i].trim();
             
             // Look for resource group count
             if (line.includes('Found') && line.includes('resource group(s)')) {
@@ -897,47 +899,98 @@
               }
             }
             
-            // Look for JSON data (find lines that start with [ or {)
-            if (line.trim().startsWith('[') || line.trim().startsWith('{')) {
-              try {
-                // Try to parse as JSON
-                const potentialJson = line.trim();
-                if (potentialJson.includes('"name"') && potentialJson.includes('"location"')) {
-                  jsonData = JSON.parse(potentialJson);
+            // Look for start of JSON array
+            if (line.startsWith('[') && line.includes('"name"')) {
+              insideJsonBlock = true;
+              currentJsonBuffer = line;
+              
+              // Check if it's a single line JSON
+              if (line.endsWith(']')) {
+                try {
+                  jsonData = JSON.parse(currentJsonBuffer);
                   if (Array.isArray(jsonData)) {
                     resourceGroups = jsonData;
-                    appendLog(`📋 Parsed ${resourceGroups.length} resource groups from JSON`);
-                  } else if (jsonData.name) {
-                    resourceGroups = [jsonData];
-                    appendLog(`📋 Parsed 1 resource group from JSON`);
+                    appendLog(`📋 Parsed ${resourceGroups.length} resource groups from single-line JSON`);
                   }
+                  insideJsonBlock = false;
+                  currentJsonBuffer = '';
+                } catch (e) {
+                  // Continue collecting lines
+                }
+              }
+              continue;
+            }
+            
+            // Continue collecting multi-line JSON
+            if (insideJsonBlock) {
+              currentJsonBuffer += '\n' + line;
+              
+              if (line.endsWith(']')) {
+                try {
+                  jsonData = JSON.parse(currentJsonBuffer);
+                  if (Array.isArray(jsonData)) {
+                    resourceGroups = jsonData;
+                    appendLog(`📋 Parsed ${resourceGroups.length} resource groups from multi-line JSON`);
+                  }
+                } catch (e) {
+                  appendLog(`⚠️ Failed to parse JSON block: ${e.message}`);
+                }
+                insideJsonBlock = false;
+                currentJsonBuffer = '';
+              }
+              continue;
+            }
+            
+            // Look for single JSON object
+            if (line.startsWith('{') && line.includes('"name"') && line.endsWith('}')) {
+              try {
+                const singleRg = JSON.parse(line);
+                if (singleRg.name) {
+                  resourceGroups.push(singleRg);
+                  appendLog(`📝 Parsed single resource group: ${singleRg.name}`);
                 }
               } catch (e) {
-                // Ignore JSON parse errors
+                // Ignore JSON parse errors for single objects
               }
             }
             
-            // Look for individual resource group entries (lines starting with "- ")
-            if (line.includes('- ') && line.includes('(') && line.includes(')')) {
-              const match = line.match(/- (.+) \(([^)]+)\) - (.+)/);
+            // Look for human-readable resource group entries (lines starting with "- ")
+            if (line.startsWith('- ') && line.includes('(') && line.includes(')')) {
+              const match = line.match(/^- (.+) \(([^)]+)\) - (.+)$/);
               if (match) {
+                const rgName = match[1].trim();
+                const rgLocation = match[2].trim();
+                const rgState = match[3].trim();
+                
                 resourceGroups.push({
-                  name: match[1],
-                  location: match[2],
-                  state: match[3]
+                  name: rgName,
+                  location: rgLocation,
+                  state: rgState
                 });
-                appendLog(`📝 Parsed resource group: ${match[1]} in ${match[2]}`);
+                appendLog(`📝 Parsed resource group: ${rgName} in ${rgLocation}`);
               }
             }
           }
           
-          appendLog(`📊 Total parsed: ${resourceGroups.length} resource groups`);
+          // Remove duplicates based on name
+          const uniqueResourceGroups = [];
+          const seenNames = new Set();
+          
+          resourceGroups.forEach(rg => {
+            if (rg.name && !seenNames.has(rg.name)) {
+              seenNames.add(rg.name);
+              uniqueResourceGroups.push(rg);
+            }
+          });
+          
+          appendLog(`📊 Total unique resource groups parsed: ${uniqueResourceGroups.length}`);
           
           // Display the results
-          if (resourceGroupCount > 0 || resourceGroups.length > 0) {
-            displayResourceGroupResults(resourceGroups, resourceGroupCount, jsonData);
+          if (resourceGroupCount > 0 || uniqueResourceGroups.length > 0) {
+            displayResourceGroupResults(uniqueResourceGroups, resourceGroupCount || uniqueResourceGroups.length, jsonData);
           } else {
             appendLog('⚠️ No resource group data found in logs');
+            appendLog('💡 Check the workflow logs manually for resource group information');
           }
           
         } catch (error) {
@@ -955,46 +1008,57 @@
         
         // Update count
         const countElement = document.getElementById('resource-group-count');
-        countElement.innerHTML = `<h3>Total Resource Groups Found: ${count || resourceGroups.length}</h3>`;
+        const finalCount = count || resourceGroups.length;
+        countElement.innerHTML = `<h3>Total Resource Groups Found: ${finalCount}</h3>`;
         
         // Display resource group list
         const listElement = document.getElementById('resource-group-list');
         if (resourceGroups.length > 0) {
-          let listHtml = '<h4>Resource Group Details:</h4><ul>';
-          resourceGroups.forEach(rg => {
+          let listHtml = '<h4>Resource Group Details:</h4><ul style="list-style-type: none; padding-left: 0;">';
+          
+          resourceGroups.forEach((rg, index) => {
             const name = rg.name || 'Unknown';
-            const location = rg.location || 'Unknown';
+            const location = rg.location || rg.properties?.location || 'Unknown';
             const state = rg.state || rg.properties?.provisioningState || 'Unknown';
             const id = rg.id || 'N/A';
             
-            listHtml += `<li><strong>${name}</strong>`;
+            listHtml += `<li style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
+            listHtml += `<strong style="font-size: 16px; color: #2196F3;">${name}</strong>`;
+            
             if (location !== 'Unknown') {
-              listHtml += ` - <span style="color: #2196F3; font-weight: bold;">${location}</span>`;
+              listHtml += ` <span style="background-color: #e3f2fd; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 10px;">${location}</span>`;
             }
+            
             if (state !== 'Unknown') {
-              const stateColor = state === 'Succeeded' ? 'green' : (state === 'Failed' ? 'red' : 'orange');
-              listHtml += ` - <span style="color: ${stateColor}; font-weight: bold;">${state}</span>`;
+              const stateColor = state === 'Succeeded' ? '#4CAF50' : (state === 'Failed' ? '#F44336' : '#FF9800');
+              listHtml += ` <span style="background-color: ${stateColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px;">${state}</span>`;
             }
+            
             if (id && id !== 'N/A' && id.length > 10) {
-              listHtml += `<br><small style="color: #666; font-family: monospace; font-size: 11px;">${id}</small>`;
+              listHtml += `<br><small style="color: #666; font-family: monospace; font-size: 11px; margin-top: 5px; display: block;">${id}</small>`;
             }
+            
             listHtml += '</li>';
           });
+          
           listHtml += '</ul>';
           listElement.innerHTML = listHtml;
         } else {
-          listElement.innerHTML = '<p>No resource group details available</p>';
+          listElement.innerHTML = '<p style="color: #666;">No resource group details available</p>';
         }
         
         // Display raw JSON data
         const jsonElement = document.getElementById('resource-group-json');
-        if (jsonData) {
+        if (jsonData && Array.isArray(jsonData)) {
           jsonElement.textContent = JSON.stringify(jsonData, null, 2);
         } else if (resourceGroups.length > 0) {
           jsonElement.textContent = JSON.stringify(resourceGroups, null, 2);
         } else {
           jsonElement.textContent = 'No JSON data available';
         }
+        
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
         
         appendLog(`✅ Resource group results displayed successfully`);
       }
