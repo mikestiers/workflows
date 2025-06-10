@@ -175,53 +175,7 @@
       <details>
         <summary style="cursor: pointer; font-weight: bold;">View Raw JSON Data</summary>
         <pre id="resource-group-json" style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;"></pre>
-      </details>
-    </div>
-  </div>
-
-  <div class="workflow-section">
-    <h2>🔧 Troubleshooting</h2>
-    <details>
-      <summary style="cursor: pointer; font-weight: bold;">Common Issues & Solutions</summary>
-      <div style="margin-top: 10px;">        <h4>❌ "403 Forbidden" Error When Fetching Logs</h4>
-        <p><strong>Cause:</strong> The GitHub token may not have sufficient permissions to read workflow logs.</p>
-        <p><strong>Solutions:</strong></p>
-        <ul>
-          <li>Ensure your token has the <code>actions:read</code> scope</li>
-          <li>For private repositories, ensure you have repository access</li>
-          <li>The workflow logs may have expired (GitHub keeps them for 90 days)</li>
-          <li>Use the artifacts download feature instead - data is always available there</li>
-        </ul>
-        
-        <h4>🗜️ Compressed/Garbled Log Content</h4>
-        <p><strong>Cause:</strong> GitHub Actions logs are often gzip compressed.</p>
-        <p><strong>Solutions:</strong></p>
-        <ul>
-          <li>The page attempts automatic decompression for modern browsers</li>
-          <li>If decompression fails, the complete data is available in artifacts</li>
-          <li>Download artifacts for guaranteed access to readable data</li>
-          <li>Artifacts contain both JSON and human-readable text formats</li>
-        </ul>
-        
-        <h4>⚠️ No Resource Groups Displayed</h4>
-        <p><strong>Cause:</strong> Log parsing failed or no resource groups exist.</p>
-        <p><strong>Solutions:</strong></p>
-        <ul>
-          <li>Check the workflow logs manually on GitHub Actions page</li>
-          <li>Download the artifacts which contain the complete data</li>
-          <li>Verify your Azure credentials in the repository secrets</li>
-          <li>Check if you have any resource groups in your Azure subscription</li>
-        </ul>
-        
-        <h4>🔑 Authentication Issues</h4>
-        <p><strong>Solutions:</strong></p>
-        <ul>
-          <li>Re-authenticate with a fresh token</li>
-          <li>Ensure the token has <code>workflow</code> and <code>actions:read</code> permissions</li>
-          <li>Check that the repository is accessible with your account</li>
-        </ul>
-      </div>
-    </details>
+      </details>    </div>
   </div>
 
   <script>
@@ -424,7 +378,6 @@
           return response.json();
         })        .then(data => {
           appendAuthMessage('✅ Token verified with workflow access permissions.', false);
-          appendAuthMessage('⚠️ Note: If you get "403 Forbidden" errors later, you may need additional permissions for private repositories or logs access.', false);
         })
         .catch(error => {
           console.error('Error verifying token:', error);
@@ -794,44 +747,14 @@
         
         workflowLogs.appendChild(logEntry);
         workflowLogs.scrollTop = workflowLogs.scrollHeight;
-      }        /**
+      }      /**
        * Fetch resource group results from the completed workflow
        */
       async function fetchResourceGroupResults(runId) {
         try {
-          appendLog('🔍 Fetching resource group results from workflow...');
+          appendLog('🔍 Fetching workflow summary...');
           
-          // First, try to get data from workflow summary
-          const summaryData = await tryFetchFromWorkflowSummary(runId);
-          if (summaryData) {
-            appendLog('✅ Successfully retrieved data from workflow summary');
-            return;
-          }
-          
-          // Get job details to access outputs
-          const jobsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/jobs`, {
-            headers: {
-              'Authorization': `token ${accessToken}`
-            }
-          });
-          
-          if (!jobsResponse.ok) {
-            throw new Error(`Failed to fetch job details: ${jobsResponse.status}`);
-          }
-          
-          const jobsData = await jobsResponse.json();
-          appendLog(`📋 Found ${jobsData.jobs.length} job(s)`);
-          
-          // Find the get-resource-groups job
-          const resourceGroupJob = jobsData.jobs.find(job => job.name === 'Get Azure Resource Groups');
-          
-          if (!resourceGroupJob) {
-            appendLog('⚠️ Could not find resource group job in workflow run', true);
-            return;
-          }
-          
-          appendLog(`✅ Found resource group job with status: ${resourceGroupJob.status}`);
-            // Get workflow run details to access outputs
+          // Get workflow run summary
           const runResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
             headers: {
               'Authorization': `token ${accessToken}`
@@ -839,602 +762,58 @@
           });
           
           if (!runResponse.ok) {
-            throw new Error(`Failed to fetch run details: ${runResponse.status}`);
+            throw new Error(`Failed to fetch workflow summary: ${runResponse.status}`);
           }
           
-          const runData = await runResponse.json();
-            // Check if we can access job outputs
-          if (runData.conclusion === 'success') {
-            appendLog('🔍 Checking for resource group data...');
-            
-            // GitHub Actions job outputs are not directly accessible from run API
-            // The outputs defined in the workflow are internal to GitHub Actions
-            // We need to parse the logs to extract the data
-            appendLog('📝 Job outputs are not accessible via API, proceeding to log parsing');
-          }
-            // Try to get artifacts which contain the resource group data
-          const artifactsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/artifacts`, {
-            headers: {
-              'Authorization': `token ${accessToken}`
-            }
-          });
+          const workflowSummary = await runResponse.json();
+          appendLog('✅ Successfully retrieved workflow summary');
           
-          if (artifactsResponse.ok) {
-            const artifactsData = await artifactsResponse.json();
-            const resourceGroupArtifact = artifactsData.artifacts.find(artifact => 
-              artifact.name.includes('azure-resource-groups')
-            );            if (resourceGroupArtifact) {
-              appendLog(`📦 Found resource group artifact: ${resourceGroupArtifact.name}`);
-              displayResourceGroupArtifactInfo(resourceGroupArtifact);
-                // Since artifacts contain the complete data, let's show a message about this
-              appendLog('✅ Complete resource group data is available in the artifact above');
-              appendLog('💡 Artifact contains JSON data (note: GitHub always packages artifacts as ZIP files)');
-              
-              // Skip log parsing since we have artifacts - return early
-              appendLog('🎯 Resource group data successfully located in artifacts');
-              return;
-            } else {
-              appendLog('⚠️ No resource group artifacts found');
-            }
-          }          // Parse logs for resource group information (fallback method)
-          appendLog('🔄 Attempting to fetch workflow logs...');
+          // Display the JSON summary
+          displayWorkflowSummary(workflowSummary);
           
-          // Try different approaches to get the logs
-          const logEndpoints = [
-            // Try job logs first
-            `${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`,
-            // Try workflow run logs as backup
-            `${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/logs`
-          ];
-          
-          let logsText = null;
-          let logsFetched = false;
-          
-          for (const endpoint of logEndpoints) {
-            try {
-              appendLog(`📝 Trying logs endpoint: ${endpoint.split('/').slice(-2).join('/')}`);
-                const logsResponse = await fetch(endpoint, {
-                headers: {
-                  'Authorization': `token ${accessToken}`,
-                  'Accept': 'application/vnd.github.v3+json'
-                }
-              });
-              
-              if (logsResponse.ok) {
-                // GitHub Actions logs are often gzip compressed
-                const contentEncoding = logsResponse.headers.get('content-encoding');
-                appendLog(`📝 Content encoding: ${contentEncoding || 'none'}`);
-                
-                // Get the response as array buffer to handle potential compression
-                const arrayBuffer = await logsResponse.arrayBuffer();
-                
-                let logsTextTemp;
-                if (contentEncoding === 'gzip' || endpoint.includes('/logs')) {
-                  // Try to decompress if it's gzip or if it's a logs endpoint
-                  try {
-                    // Check if the data looks like gzip (starts with 0x1f 0x8b)
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    if (uint8Array[0] === 0x1f && uint8Array[1] === 0x8b) {
-                      appendLog('📝 Detected gzip compressed logs, attempting to decompress...');
-                      
-                      // Try to use DecompressionStream if available (modern browsers)
-                      if (typeof DecompressionStream !== 'undefined') {
-                        const decompressedStream = new DecompressionStream('gzip');
-                        const response = new Response(arrayBuffer);
-                        const decompressedResponse = response.body.pipeThrough(decompressedStream);
-                        const decompressedBuffer = await new Response(decompressedResponse).arrayBuffer();
-                        logsTextTemp = new TextDecoder().decode(decompressedBuffer);
-                        appendLog('📝 Successfully decompressed logs using DecompressionStream');
-                      } else {
-                        appendLog('⚠️ Browser does not support DecompressionStream, trying alternative...');
-                        // Fallback: try to decode as text anyway (might work for some logs)
-                        logsTextTemp = new TextDecoder('utf-8', { ignoreBOM: true }).decode(arrayBuffer);
-                      }
-                    } else {
-                      // Not gzip, decode as regular text
-                      logsTextTemp = new TextDecoder().decode(arrayBuffer);
-                    }
-                  } catch (decompressionError) {
-                    appendLog(`⚠️ Decompression failed: ${decompressionError.message}`);
-                    // Fallback to regular text decoding
-                    logsTextTemp = new TextDecoder('utf-8', { ignoreBOM: true }).decode(arrayBuffer);
-                  }
-                } else {
-                  // Regular text response
-                  logsTextTemp = new TextDecoder().decode(arrayBuffer);
-                }
-                
-                // Check if the logs look reasonable (not binary garbage)
-                const isValidText = /^[\x20-\x7E\s]*$/.test(logsTextTemp.substring(0, 500));
-                if (!isValidText && logsTextTemp.length > 100) {
-                  appendLog('⚠️ Logs appear to be compressed/binary, but decompression failed');
-                  appendLog('💡 Try downloading the logs manually from GitHub Actions page');
-                  continue; // Try next endpoint
-                }
-                
-                logsText = logsTextTemp;
-                appendLog('📝 Successfully fetched workflow logs');
-                appendLog(`📄 Log size: ${logsText.length} characters`);
-                logsFetched = true;
-                break;
-              } else if (logsResponse.status === 403) {
-                appendLog(`❌ Access denied (403) for ${endpoint.split('/').slice(-2).join('/')}`);
-                appendLog('⚠️ This may be due to insufficient token permissions or private repository settings');
-              } else {
-                appendLog(`❌ Failed to fetch from ${endpoint.split('/').slice(-2).join('/')} (status: ${logsResponse.status})`);
-              }
-              
-            } catch (error) {
-              appendLog(`❌ Error fetching from ${endpoint.split('/').slice(-2).join('/')}: ${error.message}`);
-            }
-          }
-          
-          if (logsFetched && logsText) {
-            // Show a sample of the logs for debugging
-            const logLines = logsText.split('\n');
-            appendLog(`📄 Total log lines: ${logLines.length}`);
-            
-            // Show first few lines that contain relevant information
-            const relevantLines = logLines.filter(line => 
-              line.includes('resource group') || 
-              line.includes('Found') ||
-              line.includes('[') ||
-              line.includes('- ') ||
-              line.includes('azure') ||
-              line.includes('group list')
-            ).slice(0, 5);
-            
-            if (relevantLines.length > 0) {
-              appendLog(`📄 Sample relevant log lines:`);
-              relevantLines.forEach((line, idx) => {
-                appendLog(`  ${idx + 1}: ${line.trim()}`);
-              });
-            }
-            
-            parseResourceGroupLogs(logsText);          } else {
-            appendLog('❌ Could not access workflow logs from any endpoint', true);
-            appendLog('💡 This might be due to one of the following reasons:');
-            appendLog('   • Token needs "actions:read" permission scope');
-            appendLog('   • Repository is private and token lacks access');
-            appendLog('   • Workflow logs have expired or been deleted');
-            appendLog('');
-            appendLog('📦 Alternative: Resource group data is available in workflow artifacts');
-            appendLog('🔗 You can download the artifacts from the GitHub Actions page');
-            
-            // Don't show a mock display here - let the user know to check artifacts instead
-            appendLog('💡 If artifacts are available above, the complete data can be found there');
-          }
-            } catch (error) {
-          console.error('Error fetching resource group results:', error);
-          appendLog(`❌ Error fetching resource group results: ${error.message}`, true);
+        } catch (error) {
+          console.error('Error fetching workflow summary:', error);
+          appendLog(`❌ Error fetching workflow summary: ${error.message}`, true);
         }
       }      /**
-       * Try to fetch resource group data from workflow summary/job summary
+       * Display workflow summary JSON
        */
-      async function tryFetchFromWorkflowSummary(runId) {
-        try {
-          appendLog('🔍 Checking workflow logs for structured resource group data...');
-          
-          // Get job details to find the resource group job
-          const jobsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/jobs`, {
-            headers: {
-              'Authorization': `token ${accessToken}`
-            }
-          });
-          
-          if (!jobsResponse.ok) {
-            appendLog(`⚠️ Could not fetch job details (status: ${jobsResponse.status})`);
-            return false;
-          }
-          
-          const jobsData = await jobsResponse.json();
-          const resourceGroupJob = jobsData.jobs.find(job => job.name === 'Get Azure Resource Groups');
-          
-          if (!resourceGroupJob) {
-            appendLog('⚠️ Could not find resource group job');
-            return false;
-          }
-          
-          // Try to get the job logs which should contain our structured data
-          const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`, {
-            headers: {
-              'Authorization': `token ${accessToken}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
-          });
-          
-          if (!logsResponse.ok) {
-            appendLog(`⚠️ Could not fetch job logs (status: ${logsResponse.status})`);
-            return false;
-          }
-          
-          // Handle compressed logs
-          const arrayBuffer = await logsResponse.arrayBuffer();
-          let logsText;
-          
-          try {
-            // Check if it's gzip compressed
-            const uint8Array = new Uint8Array(arrayBuffer);
-            if (uint8Array[0] === 0x1f && uint8Array[1] === 0x8b) {
-              if (typeof DecompressionStream !== 'undefined') {
-                const decompressedStream = new DecompressionStream('gzip');
-                const response = new Response(arrayBuffer);
-                const decompressedResponse = response.body.pipeThrough(decompressedStream);
-                const decompressedBuffer = await new Response(decompressedResponse).arrayBuffer();
-                logsText = new TextDecoder().decode(decompressedBuffer);
-              } else {
-                logsText = new TextDecoder('utf-8', { ignoreBOM: true }).decode(arrayBuffer);
-              }
-            } else {
-              logsText = new TextDecoder().decode(arrayBuffer);
-            }
-          } catch (error) {
-            appendLog(`⚠️ Error decompressing logs: ${error.message}`);
-            return false;
-          }
-          
-          // Look for our structured data markers
-          const startMarker = 'AZURE_RESOURCE_GROUPS_START';
-          const endMarker = 'AZURE_RESOURCE_GROUPS_END';
-          
-          const startIndex = logsText.indexOf(startMarker);
-          const endIndex = logsText.indexOf(endMarker);
-          
-          if (startIndex === -1 || endIndex === -1) {
-            appendLog('⚠️ Could not find structured resource group data in logs');
-            
-            // Try to find API access data in logs
-            const apiStartMarker = 'AZURE_RESOURCE_GROUPS_API_START';
-            const apiEndMarker = 'AZURE_RESOURCE_GROUPS_API_END';
-            
-            const apiStartIndex = logsText.indexOf(apiStartMarker);
-            const apiEndIndex = logsText.indexOf(apiEndMarker);
-            
-            if (apiStartIndex !== -1 && apiEndIndex !== -1) {
-              appendLog('✅ Found API access data in workflow summary');
-              return tryParseApiDataFromSummary(logsText, apiStartIndex, apiEndIndex);
-            }
-            
-            return false;
-          }
-          
-          const structuredData = logsText.substring(startIndex + startMarker.length, endIndex).trim();
-          const lines = structuredData.split('\n');
-          
-          let resourceGroupCount = 0;
-          let resourceGroupSummary = null;
-          
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.startsWith('COUNT: ')) {
-              resourceGroupCount = parseInt(trimmedLine.substring(7));
-            } else if (trimmedLine.startsWith('SUMMARY: ')) {
-              try {
-                resourceGroupSummary = JSON.parse(trimmedLine.substring(9));
-              } catch (e) {
-                appendLog(`⚠️ Error parsing resource group summary: ${e.message}`);
-              }
-            }
-          }
-          
-          if (resourceGroupSummary) {
-            appendLog(`✅ Successfully parsed ${resourceGroupCount} resource groups from structured log data`);
-            
-            // Display the results
-            displayResourceGroupResults(resourceGroupSummary, resourceGroupCount, resourceGroupSummary);
-            return true;
-          }
-          
-          return false;
-          
-        } catch (error) {
-          appendLog(`⚠️ Error accessing workflow summary: ${error.message}`);
-          return false;
-        }
-      }
-
-      /**
-       * Try to parse API access data from workflow summary
-       */
-      async function tryParseApiDataFromSummary(logsText, startIndex, endIndex) {
-        try {
-          // Extract the content between the API markers
-          const summaryContent = logsText.substring(startIndex, endIndex);
-          
-          // Look for JSON content between ```json and ``` markers
-          const jsonStartMarker = '```json';
-          const jsonEndMarker = '```';
-          
-          const jsonStart = summaryContent.indexOf(jsonStartMarker);
-          if (jsonStart === -1) {
-            appendLog('⚠️ Could not find JSON content in API access section');
-            return false;
-          }
-          
-          const jsonDataStart = jsonStart + jsonStartMarker.length;
-          const jsonEnd = summaryContent.indexOf(jsonEndMarker, jsonDataStart);
-          
-          if (jsonEnd === -1) {
-            appendLog('⚠️ Could not find end of JSON content in API access section');
-            return false;
-          }
-          
-          const jsonContent = summaryContent.substring(jsonDataStart, jsonEnd).trim();
-          
-          try {
-            const apiData = JSON.parse(jsonContent);
-            
-            if (apiData.resource_groups && Array.isArray(apiData.resource_groups)) {
-              appendLog(`✅ Successfully parsed ${apiData.count} resource groups from API access data`);
-              appendLog(`🕒 Data timestamp: ${apiData.timestamp}`);
-              appendLog(`🆔 Run ID: ${apiData.run_id}`);
-              
-              // Display the results
-              displayResourceGroupResults(apiData.resource_groups, apiData.count, apiData.resource_groups);
-              return true;
-            } else {
-              appendLog('⚠️ Invalid API data structure - missing resource_groups array');
-              return false;
-            }
-            
-          } catch (parseError) {
-            appendLog(`⚠️ Error parsing API access JSON: ${parseError.message}`);
-            return false;
-          }
-          
-        } catch (error) {
-          appendLog(`⚠️ Error processing API access data: ${error.message}`);
-          return false;
-        }
-      }/**
-       * Parse workflow logs to extract resource group information
-       */
-      function parseResourceGroupLogs(logsText) {
-        try {
-          appendLog('📝 Parsing workflow logs for resource group data...');
-          
-          const lines = logsText.split('\n');
-          let resourceGroupCount = 0;
-          let resourceGroups = [];
-          let jsonData = null;
-          let currentJsonBuffer = '';
-          let insideJsonBlock = false;
-          
-          // Look for resource group information in the logs
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            
-            // Look for resource group count
-            if (line.includes('Found') && line.includes('resource group(s)')) {
-              const match = line.match(/Found (\d+) resource group\(s\)/);
-              if (match) {
-                resourceGroupCount = parseInt(match[1]);
-                appendLog(`📊 Parsed count: ${resourceGroupCount}`);
-              }
-            }
-            
-            // Look for start of JSON array
-            if (line.startsWith('[') && line.includes('"name"')) {
-              insideJsonBlock = true;
-              currentJsonBuffer = line;
-              
-              // Check if it's a single line JSON
-              if (line.endsWith(']')) {
-                try {
-                  jsonData = JSON.parse(currentJsonBuffer);
-                  if (Array.isArray(jsonData)) {
-                    resourceGroups = jsonData;
-                    appendLog(`📋 Parsed ${resourceGroups.length} resource groups from single-line JSON`);
-                  }
-                  insideJsonBlock = false;
-                  currentJsonBuffer = '';
-                } catch (e) {
-                  // Continue collecting lines
-                }
-              }
-              continue;
-            }
-            
-            // Continue collecting multi-line JSON
-            if (insideJsonBlock) {
-              currentJsonBuffer += '\n' + line;
-              
-              if (line.endsWith(']')) {
-                try {
-                  jsonData = JSON.parse(currentJsonBuffer);
-                  if (Array.isArray(jsonData)) {
-                    resourceGroups = jsonData;
-                    appendLog(`📋 Parsed ${resourceGroups.length} resource groups from multi-line JSON`);
-                  }
-                } catch (e) {
-                  appendLog(`⚠️ Failed to parse JSON block: ${e.message}`);
-                }
-                insideJsonBlock = false;
-                currentJsonBuffer = '';
-              }
-              continue;
-            }
-            
-            // Look for single JSON object
-            if (line.startsWith('{') && line.includes('"name"') && line.endsWith('}')) {
-              try {
-                const singleRg = JSON.parse(line);
-                if (singleRg.name) {
-                  resourceGroups.push(singleRg);
-                  appendLog(`📝 Parsed single resource group: ${singleRg.name}`);
-                }
-              } catch (e) {
-                // Ignore JSON parse errors for single objects
-              }
-            }
-            
-            // Look for human-readable resource group entries (lines starting with "- ")
-            if (line.startsWith('- ') && line.includes('(') && line.includes(')')) {
-              const match = line.match(/^- (.+) \(([^)]+)\) - (.+)$/);
-              if (match) {
-                const rgName = match[1].trim();
-                const rgLocation = match[2].trim();
-                const rgState = match[3].trim();
-                
-                resourceGroups.push({
-                  name: rgName,
-                  location: rgLocation,
-                  state: rgState
-                });
-                appendLog(`📝 Parsed resource group: ${rgName} in ${rgLocation}`);
-              }
-            }
-          }
-          
-          // Remove duplicates based on name
-          const uniqueResourceGroups = [];
-          const seenNames = new Set();
-          
-          resourceGroups.forEach(rg => {
-            if (rg.name && !seenNames.has(rg.name)) {
-              seenNames.add(rg.name);
-              uniqueResourceGroups.push(rg);
-            }
-          });
-          
-          appendLog(`📊 Total unique resource groups parsed: ${uniqueResourceGroups.length}`);
-          
-          // Display the results
-          if (resourceGroupCount > 0 || uniqueResourceGroups.length > 0) {
-            displayResourceGroupResults(uniqueResourceGroups, resourceGroupCount || uniqueResourceGroups.length, jsonData);
-          } else {
-            appendLog('⚠️ No resource group data found in logs');
-            appendLog('💡 Check the workflow logs manually for resource group information');
-          }
-          
-        } catch (error) {
-          appendLog(`❌ Error parsing logs: ${error.message}`, true);
-        }
-      }      /**
-       * Display resource group results in the UI
-       */
-      function displayResourceGroupResults(resourceGroups, count, jsonData) {
-        appendLog(`📊 Displaying results for ${resourceGroups.length} resource group(s)`);
+      function displayWorkflowSummary(workflowSummary) {
+        appendLog('📊 Displaying workflow summary');
         
         // Show the results section
         const resultsSection = document.getElementById('resource-group-results');
         resultsSection.style.display = 'block';
         
-        // Update count
+        // Update the section title
+        const resultsTitle = resultsSection.querySelector('h2');
+        resultsTitle.textContent = '📋 Workflow Summary';
+        
+        // Clear previous content
         const countElement = document.getElementById('resource-group-count');
-        const finalCount = count || resourceGroups.length;
-        countElement.innerHTML = `<h3>Total Resource Groups Found: ${finalCount}</h3>`;
+        countElement.innerHTML = '<h3>Workflow Run Summary</h3>';
         
-        // Display resource group list
-        const listElement = document.getElementById('resource-group-list');
-        if (resourceGroups.length > 0) {
-          let listHtml = '<h4>Resource Group Details:</h4><ul style="list-style-type: none; padding-left: 0;">';
-          
-          resourceGroups.forEach((rg, index) => {
-            const name = rg.name || 'Unknown';
-            const location = rg.location || rg.properties?.location || 'Unknown';
-            const state = rg.state || rg.properties?.provisioningState || 'Unknown';
-            const id = rg.id || 'N/A';
-            
-            listHtml += `<li style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
-            listHtml += `<strong style="font-size: 16px; color: #2196F3;">${name}</strong>`;
-            
-            if (location !== 'Unknown') {
-              listHtml += ` <span style="background-color: #e3f2fd; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 10px;">${location}</span>`;
-            }
-            
-            if (state !== 'Unknown') {
-              const stateColor = state === 'Succeeded' ? '#4CAF50' : (state === 'Failed' ? '#F44336' : '#FF9800');
-              listHtml += ` <span style="background-color: ${stateColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px;">${state}</span>`;
-            }
-            
-            if (id && id !== 'N/A' && id.length > 10) {
-              listHtml += `<br><small style="color: #666; font-family: monospace; font-size: 11px; margin-top: 5px; display: block;">${id}</small>`;
-            }
-            
-            listHtml += '</li>';
-          });
-          
-          listHtml += '</ul>';
-          listElement.innerHTML = listHtml;
-        } else {
-          listElement.innerHTML = '<p style="color: #666;">No resource group details available</p>';
-        }
-        
-        // Display raw JSON data
-        const jsonElement = document.getElementById('resource-group-json');
-        if (jsonData && Array.isArray(jsonData)) {
-          jsonElement.textContent = JSON.stringify(jsonData, null, 2);
-        } else if (resourceGroups.length > 0) {
-          jsonElement.textContent = JSON.stringify(resourceGroups, null, 2);
-        } else {
-          jsonElement.textContent = 'No JSON data available';
-        }
-        
-        // Scroll to results
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
-        
-        appendLog(`✅ Resource group results displayed successfully`);
-      }      /**
-       * Display artifact information
-       */
-      function displayResourceGroupArtifactInfo(artifact) {
-        appendLog(`📦 Artifact available: ${artifact.name}`);
-        appendLog(`📅 Created: ${new Date(artifact.created_at).toLocaleString()}`);
-        appendLog(`💾 Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB`);
-        
-        // Show the results section and add prominent artifact info
-        const resultsSection = document.getElementById('resource-group-results');
-        resultsSection.style.display = 'block';
-        
-        // Update the count section to show artifact info
-        const countElement = document.getElementById('resource-group-count');
-        countElement.innerHTML = `
-          <h3>📦 Azure Resource Group Data Available in Artifacts</h3>
-          <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #4caf50; margin: 10px 0;">
-            <h4 style="margin-top: 0; color: #2e7d32;">✅ Complete Data Available for Download</h4>
-            <p><strong>Artifact Name:</strong> ${artifact.name}</p>
-            <p><strong>File Size:</strong> ${(artifact.size_in_bytes / 1024).toFixed(2)} KB</p>
-            <p><strong>Created:</strong> ${new Date(artifact.created_at).toLocaleString()}</p>            <p><strong>Contains:</strong> JSON file in ZIP archive (GitHub always packages artifacts as ZIP)</p>
-          </div>
-        `;
-        
-        // Add download instructions
         const listElement = document.getElementById('resource-group-list');
         listElement.innerHTML = `
-          <h4>📥 How to Download Resource Group Data:</h4>
-          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 10px 0;">
-            <ol style="margin: 0; padding-left: 20px;">
-              <li>Click the <strong>"Open Workflow Run"</strong> link above</li>
-              <li>Scroll down to the <strong>"Artifacts"</strong> section on the GitHub page</li>              <li>Click on <strong>"${artifact.name}"</strong> to download the ZIP file</li>
-              <li>Extract the ZIP file to find <code>resource-groups.json</code> with complete data including:
-                <ul style="margin-top: 5px;">
-                  <li>Resource group names, locations, and states</li>
-                  <li>Full Azure resource IDs and properties</li>
-                  <li>Provisioning status and metadata</li>
-                </ul>
-              </li>
-            </ol>
-            <p style="margin-top: 10px; color: #666; font-size: 14px;">
-              💡 <strong>Note:</strong> GitHub Actions always packages artifacts as ZIP files, even for single files. Extract the ZIP to access the JSON data.
-            </p>
+          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
+            <p><strong>Status:</strong> ${workflowSummary.status || 'Unknown'}</p>
+            <p><strong>Conclusion:</strong> ${workflowSummary.conclusion || 'Unknown'}</p>
+            <p><strong>Workflow:</strong> ${workflowSummary.name || 'Unknown'}</p>
+            <p><strong>Run Number:</strong> ${workflowSummary.run_number || 'Unknown'}</p>
+            <p><strong>Created:</strong> ${workflowSummary.created_at ? new Date(workflowSummary.created_at).toLocaleString() : 'Unknown'}</p>
+            <p><strong>Updated:</strong> ${workflowSummary.updated_at ? new Date(workflowSummary.updated_at).toLocaleString() : 'Unknown'}</p>
           </div>
         `;
-          // Show artifact info in JSON section too
+        
+        // Display the complete JSON
         const jsonElement = document.getElementById('resource-group-json');
-        jsonElement.textContent = `Artifact Information:
-Name: ${artifact.name}
-Size: ${(artifact.size_in_bytes / 1024).toFixed(2)} KB
-Created: ${new Date(artifact.created_at).toLocaleString()}
-Download URL: Available on GitHub Actions page
-
-The complete resource group data is available as a ZIP file download containing the JSON data.
-GitHub Actions always packages artifacts as ZIP files, even for single files.`;
+        jsonElement.textContent = JSON.stringify(workflowSummary, null, 2);
         
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth' });
-      }
-    });
+        
+        appendLog('✅ Workflow summary displayed successfully');
+      }});
   </script>
 </body>
 
