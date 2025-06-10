@@ -794,13 +794,19 @@
         
         workflowLogs.appendChild(logEntry);
         workflowLogs.scrollTop = workflowLogs.scrollHeight;
-      }
-        /**
+      }        /**
        * Fetch resource group results from the completed workflow
        */
       async function fetchResourceGroupResults(runId) {
         try {
           appendLog('🔍 Fetching resource group results from workflow...');
+          
+          // First, try to get data from workflow summary
+          const summaryData = await tryFetchFromWorkflowSummary(runId);
+          if (summaryData) {
+            appendLog('✅ Successfully retrieved data from workflow summary');
+            return;
+          }
           
           // Get job details to access outputs
           const jobsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/jobs`, {
@@ -999,12 +1005,189 @@
             // Don't show a mock display here - let the user know to check artifacts instead
             appendLog('💡 If artifacts are available above, the complete data can be found there');
           }
-          
-        } catch (error) {
+            } catch (error) {
           console.error('Error fetching resource group results:', error);
           appendLog(`❌ Error fetching resource group results: ${error.message}`, true);
         }
       }      /**
+       * Try to fetch resource group data from workflow summary/job summary
+       */
+      async function tryFetchFromWorkflowSummary(runId) {
+        try {
+          appendLog('🔍 Checking workflow logs for structured resource group data...');
+          
+          // Get job details to find the resource group job
+          const jobsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/jobs`, {
+            headers: {
+              'Authorization': `token ${accessToken}`
+            }
+          });
+          
+          if (!jobsResponse.ok) {
+            appendLog(`⚠️ Could not fetch job details (status: ${jobsResponse.status})`);
+            return false;
+          }
+          
+          const jobsData = await jobsResponse.json();
+          const resourceGroupJob = jobsData.jobs.find(job => job.name === 'Get Azure Resource Groups');
+          
+          if (!resourceGroupJob) {
+            appendLog('⚠️ Could not find resource group job');
+            return false;
+          }
+          
+          // Try to get the job logs which should contain our structured data
+          const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`, {
+            headers: {
+              'Authorization': `token ${accessToken}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
+          });
+          
+          if (!logsResponse.ok) {
+            appendLog(`⚠️ Could not fetch job logs (status: ${logsResponse.status})`);
+            return false;
+          }
+          
+          // Handle compressed logs
+          const arrayBuffer = await logsResponse.arrayBuffer();
+          let logsText;
+          
+          try {
+            // Check if it's gzip compressed
+            const uint8Array = new Uint8Array(arrayBuffer);
+            if (uint8Array[0] === 0x1f && uint8Array[1] === 0x8b) {
+              if (typeof DecompressionStream !== 'undefined') {
+                const decompressedStream = new DecompressionStream('gzip');
+                const response = new Response(arrayBuffer);
+                const decompressedResponse = response.body.pipeThrough(decompressedStream);
+                const decompressedBuffer = await new Response(decompressedResponse).arrayBuffer();
+                logsText = new TextDecoder().decode(decompressedBuffer);
+              } else {
+                logsText = new TextDecoder('utf-8', { ignoreBOM: true }).decode(arrayBuffer);
+              }
+            } else {
+              logsText = new TextDecoder().decode(arrayBuffer);
+            }
+          } catch (error) {
+            appendLog(`⚠️ Error decompressing logs: ${error.message}`);
+            return false;
+          }
+          
+          // Look for our structured data markers
+          const startMarker = 'AZURE_RESOURCE_GROUPS_START';
+          const endMarker = 'AZURE_RESOURCE_GROUPS_END';
+          
+          const startIndex = logsText.indexOf(startMarker);
+          const endIndex = logsText.indexOf(endMarker);
+          
+          if (startIndex === -1 || endIndex === -1) {
+            appendLog('⚠️ Could not find structured resource group data in logs');
+            
+            // Try to find API access data in logs
+            const apiStartMarker = 'AZURE_RESOURCE_GROUPS_API_START';
+            const apiEndMarker = 'AZURE_RESOURCE_GROUPS_API_END';
+            
+            const apiStartIndex = logsText.indexOf(apiStartMarker);
+            const apiEndIndex = logsText.indexOf(apiEndMarker);
+            
+            if (apiStartIndex !== -1 && apiEndIndex !== -1) {
+              appendLog('✅ Found API access data in workflow summary');
+              return tryParseApiDataFromSummary(logsText, apiStartIndex, apiEndIndex);
+            }
+            
+            return false;
+          }
+          
+          const structuredData = logsText.substring(startIndex + startMarker.length, endIndex).trim();
+          const lines = structuredData.split('\n');
+          
+          let resourceGroupCount = 0;
+          let resourceGroupSummary = null;
+          
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('COUNT: ')) {
+              resourceGroupCount = parseInt(trimmedLine.substring(7));
+            } else if (trimmedLine.startsWith('SUMMARY: ')) {
+              try {
+                resourceGroupSummary = JSON.parse(trimmedLine.substring(9));
+              } catch (e) {
+                appendLog(`⚠️ Error parsing resource group summary: ${e.message}`);
+              }
+            }
+          }
+          
+          if (resourceGroupSummary) {
+            appendLog(`✅ Successfully parsed ${resourceGroupCount} resource groups from structured log data`);
+            
+            // Display the results
+            displayResourceGroupResults(resourceGroupSummary, resourceGroupCount, resourceGroupSummary);
+            return true;
+          }
+          
+          return false;
+          
+        } catch (error) {
+          appendLog(`⚠️ Error accessing workflow summary: ${error.message}`);
+          return false;
+        }
+      }
+
+      /**
+       * Try to parse API access data from workflow summary
+       */
+      async function tryParseApiDataFromSummary(logsText, startIndex, endIndex) {
+        try {
+          // Extract the content between the API markers
+          const summaryContent = logsText.substring(startIndex, endIndex);
+          
+          // Look for JSON content between ```json and ``` markers
+          const jsonStartMarker = '```json';
+          const jsonEndMarker = '```';
+          
+          const jsonStart = summaryContent.indexOf(jsonStartMarker);
+          if (jsonStart === -1) {
+            appendLog('⚠️ Could not find JSON content in API access section');
+            return false;
+          }
+          
+          const jsonDataStart = jsonStart + jsonStartMarker.length;
+          const jsonEnd = summaryContent.indexOf(jsonEndMarker, jsonDataStart);
+          
+          if (jsonEnd === -1) {
+            appendLog('⚠️ Could not find end of JSON content in API access section');
+            return false;
+          }
+          
+          const jsonContent = summaryContent.substring(jsonDataStart, jsonEnd).trim();
+          
+          try {
+            const apiData = JSON.parse(jsonContent);
+            
+            if (apiData.resource_groups && Array.isArray(apiData.resource_groups)) {
+              appendLog(`✅ Successfully parsed ${apiData.count} resource groups from API access data`);
+              appendLog(`🕒 Data timestamp: ${apiData.timestamp}`);
+              appendLog(`🆔 Run ID: ${apiData.run_id}`);
+              
+              // Display the results
+              displayResourceGroupResults(apiData.resource_groups, apiData.count, apiData.resource_groups);
+              return true;
+            } else {
+              appendLog('⚠️ Invalid API data structure - missing resource_groups array');
+              return false;
+            }
+            
+          } catch (parseError) {
+            appendLog(`⚠️ Error parsing API access JSON: ${parseError.message}`);
+            return false;
+          }
+          
+        } catch (error) {
+          appendLog(`⚠️ Error processing API access data: ${error.message}`);
+          return false;
+        }
+      }/**
        * Parse workflow logs to extract resource group information
        */
       function parseResourceGroupLogs(logsText) {
