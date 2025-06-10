@@ -1,6 +1,6 @@
 // Workflow management module
 import { CONFIG } from './config.js';
-import { appendLog, updateButtonState, updateStatus, displayWorkflowSummary } from './ui.js';
+import { appendLog, updateButtonState, updateStatus } from './ui.js';
 
 export class WorkflowManager {
   constructor(authManager) {
@@ -318,35 +318,220 @@ export class WorkflowManager {
       this.workflowStatus.innerHTML = '';
     }, 5000);
   }
-
   /**
    * Fetch resource group results from the completed workflow
    */
   async fetchResourceGroupResults(runId) {
     try {
-      appendLog(this.workflowLogs, '🔍 Fetching workflow summary...');
+      appendLog(this.workflowLogs, '🔍 Fetching workflow artifacts...');
       
-      // Get workflow run summary
-      const runResponse = await fetch(`${CONFIG.PROXY_BASE_URL}/api/repos/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions/runs/${runId}`, {
+      // Get workflow artifacts
+      const artifactsResponse = await fetch(`${CONFIG.PROXY_BASE_URL}/api/repos/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions/runs/${runId}/artifacts`, {
         headers: {
           'Authorization': `token ${this.authManager.getAccessToken()}`
         }
       });
       
-      if (!runResponse.ok) {
-        throw new Error(`Failed to fetch workflow summary: ${runResponse.status}`);
+      if (!artifactsResponse.ok) {
+        throw new Error(`Failed to fetch workflow artifacts: ${artifactsResponse.status}`);
       }
       
-      const workflowSummary = await runResponse.json();
-      appendLog(this.workflowLogs, '✅ Successfully retrieved workflow summary');
+      const artifactsData = await artifactsResponse.json();
       
-      // Display the JSON summary
-      displayWorkflowSummary(workflowSummary);
-      appendLog(this.workflowLogs, '✅ Workflow summary displayed successfully');
+      if (!artifactsData.artifacts || artifactsData.artifacts.length === 0) {
+        appendLog(this.workflowLogs, '⚠️ No artifacts found for this workflow run');
+        return;
+      }
+      
+      appendLog(this.workflowLogs, `📦 Found ${artifactsData.artifacts.length} artifact(s)`);
+      
+      // Find the resource groups artifact (assuming it's named "resource-groups" or similar)
+      const artifact = artifactsData.artifacts.find(a => 
+        a.name.toLowerCase().includes('resource') || 
+        a.name.toLowerCase().includes('output') ||
+        a.name.toLowerCase().includes('result')
+      ) || artifactsData.artifacts[0]; // fallback to first artifact
+      
+      appendLog(this.workflowLogs, `📂 Downloading artifact: ${artifact.name}`);
+      
+      // Download the artifact
+      const downloadResponse = await fetch(`${CONFIG.PROXY_BASE_URL}/api/repos/${CONFIG.GITHUB.REPO_OWNER}/${CONFIG.GITHUB.REPO_NAME}/actions/artifacts/${artifact.id}/zip`, {
+        headers: {
+          'Authorization': `token ${this.authManager.getAccessToken()}`
+        }
+      });
+      
+      if (!downloadResponse.ok) {
+        throw new Error(`Failed to download artifact: ${downloadResponse.status}`);
+      }
+      
+      // Get the artifact as a blob
+      const artifactBlob = await downloadResponse.blob();
+      appendLog(this.workflowLogs, '🔧 Extracting artifact contents...');
+      
+      // Extract and process the artifact
+      await this.extractAndDisplayArtifact(artifactBlob);
       
     } catch (error) {
-      console.error('Error fetching workflow summary:', error);
-      appendLog(this.workflowLogs, `❌ Error fetching workflow summary: ${error.message}`, true);
+      console.error('Error fetching workflow artifacts:', error);
+      appendLog(this.workflowLogs, `❌ Error fetching workflow artifacts: ${error.message}`, true);
     }
+  }
+
+  /**
+   * Extract and display the contents of a GitHub artifact (ZIP file)
+   */
+  async extractAndDisplayArtifact(artifactBlob) {
+    try {
+      // Load JSZip dynamically
+      if (!window.JSZip) {
+        appendLog(this.workflowLogs, '📥 Loading ZIP extraction library...');
+        await this.loadJSZip();
+      }
+      
+      // Create JSZip instance and load the blob
+      const zip = new JSZip();
+      const zipContents = await zip.loadAsync(artifactBlob);
+      
+      appendLog(this.workflowLogs, '📁 Artifact extracted successfully');
+      
+      // Look for JSON files in the artifact
+      const jsonFiles = Object.keys(zipContents.files).filter(filename => 
+        filename.toLowerCase().endsWith('.json')
+      );
+      
+      if (jsonFiles.length === 0) {
+        // Look for any text files
+        const textFiles = Object.keys(zipContents.files).filter(filename => 
+          filename.toLowerCase().endsWith('.txt') || 
+          filename.toLowerCase().endsWith('.log') ||
+          !filename.includes('.')
+        );
+        
+        if (textFiles.length > 0) {
+          const file = zipContents.files[textFiles[0]];
+          const content = await file.async('text');
+          this.displayArtifactContent(textFiles[0], content);
+        } else {
+          appendLog(this.workflowLogs, '⚠️ No JSON or text files found in artifact');
+        }
+        return;
+      }
+      
+      // Process the first JSON file found
+      const jsonFileName = jsonFiles[0];
+      const jsonFile = zipContents.files[jsonFileName];
+      const jsonContent = await jsonFile.async('text');
+      
+      appendLog(this.workflowLogs, `📄 Processing file: ${jsonFileName}`);
+      
+      try {
+        const parsedData = JSON.parse(jsonContent);
+        this.displayResourceGroupData(parsedData);
+        appendLog(this.workflowLogs, '✅ Resource group data displayed successfully');
+      } catch (parseError) {
+        // If it's not valid JSON, display as text
+        this.displayArtifactContent(jsonFileName, jsonContent);
+        appendLog(this.workflowLogs, '✅ Artifact content displayed as text');
+      }
+      
+    } catch (error) {
+      console.error('Error extracting artifact:', error);
+      appendLog(this.workflowLogs, `❌ Error extracting artifact: ${error.message}`, true);
+    }
+  }
+
+  /**
+   * Load JSZip library dynamically
+   */
+  async loadJSZip() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
+   * Display resource group data in the UI
+   */
+  displayResourceGroupData(data) {
+    const resultsSection = document.getElementById('resource-group-results');
+    const countDiv = document.getElementById('resource-group-count');
+    const listDiv = document.getElementById('resource-group-list');
+    const jsonDiv = document.getElementById('resource-group-json');
+    
+    // Show the results section
+    resultsSection.style.display = 'block';
+    
+    // Handle different data structures
+    let resourceGroups = [];
+    let displayData = data;
+    
+    if (Array.isArray(data)) {
+      resourceGroups = data;
+    } else if (data.value && Array.isArray(data.value)) {
+      // Azure REST API format
+      resourceGroups = data.value;
+    } else if (data.resourceGroups && Array.isArray(data.resourceGroups)) {
+      resourceGroups = data.resourceGroups;
+    } else if (typeof data === 'object') {
+      // If it's an object but not the expected format, still try to display it
+      resourceGroups = [];
+      displayData = data;
+    }
+    
+    // Display count
+    if (resourceGroups.length > 0) {
+      countDiv.innerHTML = `<strong>Found ${resourceGroups.length} resource group(s)</strong>`;
+      
+      // Create a nice list of resource groups
+      const listHtml = resourceGroups.map(rg => {
+        const name = rg.name || rg.resourceGroupName || 'Unknown';
+        const location = rg.location || rg.region || 'Unknown';
+        const tags = rg.tags ? Object.keys(rg.tags).length : 0;
+        
+        return `
+          <div style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px; background-color: #f9f9f9;">
+            <strong>📦 ${name}</strong><br>
+            <span style="color: #666;">📍 Location: ${location}</span><br>
+            ${tags > 0 ? `<span style="color: #666;">🏷️ Tags: ${tags}</span>` : ''}
+          </div>
+        `;
+      }).join('');
+      
+      listDiv.innerHTML = listHtml;
+    } else {
+      countDiv.innerHTML = `<strong>Resource group data received</strong>`;
+      listDiv.innerHTML = '<div style="color: #666;">Raw data structure - see JSON below</div>';
+    }
+    
+    // Display raw JSON
+    jsonDiv.textContent = JSON.stringify(displayData, null, 2);
+  }
+
+  /**
+   * Display generic artifact content
+   */
+  displayArtifactContent(filename, content) {
+    const resultsSection = document.getElementById('resource-group-results');
+    const countDiv = document.getElementById('resource-group-count');
+    const listDiv = document.getElementById('resource-group-list');
+    const jsonDiv = document.getElementById('resource-group-json');
+    
+    // Show the results section
+    resultsSection.style.display = 'block';
+    
+    // Update labels
+    const title = resultsSection.querySelector('h2');
+    title.textContent = `📄 Workflow Output: ${filename}`;
+    
+    countDiv.innerHTML = `<strong>File: ${filename}</strong>`;
+    listDiv.innerHTML = '<div style="color: #666;">Content displayed below</div>';
+    
+    // Display content
+    jsonDiv.textContent = content;
   }
 }
