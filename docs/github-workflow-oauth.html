@@ -312,13 +312,13 @@
           authButton.textContent = 'Authenticate with GitHub';
         }
       }
-      
-      /**
+        /**
        * Display the device code and verification URL to the user
        */
       function displayDeviceCode(deviceData) {
         const { user_code, verification_uri, expires_in } = deviceData;
         
+        appendAuthMessage('✅ Device code received successfully!', false);
         appendAuthMessage('Follow these steps to authenticate:', false);
         
         // Create the device code container
@@ -333,50 +333,101 @@
         `;
         deviceContainer.appendChild(instructions);
         
-        // Add the device code
+        // Add the device code with a copy button
+        const codeContainer = document.createElement('div');
+        codeContainer.style.display = 'flex';
+        codeContainer.style.alignItems = 'center';
+        codeContainer.style.justifyContent = 'center';
+        codeContainer.style.gap = '10px';
+        
         const codeElement = document.createElement('div');
         codeElement.className = 'device-code';
         codeElement.textContent = user_code;
-        deviceContainer.appendChild(codeElement);
+        codeContainer.appendChild(codeElement);
+        
+        // Add copy button
+        const copyButton = document.createElement('button');
+        copyButton.textContent = 'Copy';
+        copyButton.style.padding = '5px 10px';
+        copyButton.style.fontSize = '12px';
+        copyButton.style.backgroundColor = '#6c757d';
+        copyButton.style.color = 'white';
+        copyButton.style.border = 'none';
+        copyButton.style.borderRadius = '3px';
+        copyButton.style.cursor = 'pointer';
+        copyButton.onclick = () => {
+          navigator.clipboard.writeText(user_code).then(() => {
+            copyButton.textContent = 'Copied!';
+            setTimeout(() => copyButton.textContent = 'Copy', 2000);
+          });
+        };
+        codeContainer.appendChild(copyButton);
+        
+        deviceContainer.appendChild(codeContainer);
         
         // Add the verification link
         const linkElement = document.createElement('a');
         linkElement.href = verification_uri;
         linkElement.target = '_blank';
         linkElement.className = 'verification-url';
-        linkElement.textContent = 'Open GitHub Device Activation';
+        linkElement.textContent = '🔗 Open GitHub Device Activation';
         linkElement.style.backgroundColor = '#28a745';
         linkElement.style.color = 'white';
-        linkElement.style.padding = '10px 20px';
+        linkElement.style.padding = '12px 24px';
         linkElement.style.textDecoration = 'none';
         linkElement.style.borderRadius = '4px';
         linkElement.style.display = 'inline-block';
-        linkElement.style.marginTop = '10px';
+        linkElement.style.marginTop = '15px';
+        linkElement.style.fontSize = '16px';
+        linkElement.style.fontWeight = 'bold';
         deviceContainer.appendChild(linkElement);
         
-        // Add expiration info
+        // Add expiration info with countdown
         const expirationInfo = document.createElement('p');
         expirationInfo.style.fontSize = '14px';
         expirationInfo.style.color = '#666';
-        expirationInfo.textContent = `This code expires in ${Math.floor(expires_in / 60)} minutes.`;
+        expirationInfo.style.marginTop = '15px';
+        
+        const expirationMinutes = Math.floor(expires_in / 60);
+        let remainingSeconds = expires_in;
+        
+        const updateCountdown = () => {
+          const minutes = Math.floor(remainingSeconds / 60);
+          const seconds = remainingSeconds % 60;
+          expirationInfo.textContent = `⏱️ Code expires in ${minutes}:${seconds.toString().padStart(2, '0')}`;
+          
+          if (remainingSeconds <= 0) {
+            expirationInfo.textContent = '❌ Code expired - please try again';
+            expirationInfo.style.color = '#dc3545';
+            return;
+          }
+          
+          remainingSeconds--;
+          setTimeout(updateCountdown, 1000);
+        };
+        
+        updateCountdown();
         deviceContainer.appendChild(expirationInfo);
         
         authStatus.appendChild(deviceContainer);
         
         // Update button text
         authButton.textContent = 'Waiting for Authorization...';
-        appendAuthMessage('Waiting for you to complete the authorization...', false);
+        appendAuthMessage('🔄 Waiting for you to complete the authorization...', false);
       }
-      
-      /**
+        /**
        * Poll GitHub for the access token
        */
       async function pollForAccessToken(deviceCode, interval) {
         const maxAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
         let attempts = 0;
-          const poll = async () => {
+        
+        appendAuthMessage('🔄 Polling GitHub for authorization...', false);
+        
+        const poll = async () => {
           try {
             attempts++;
+            console.log(`Polling attempt ${attempts}/${maxAttempts} for device code authorization`);
             
             // Use form-encoded data to avoid CORS preflight
             const formData = new URLSearchParams();
@@ -392,21 +443,29 @@
               body: formData
             });
             
+            console.log(`Polling response status: ${response.status}`);
+            
             if (!response.ok) {
-              throw new Error(`Token request failed: ${response.status}`);
+              throw new Error(`Token request failed: ${response.status} ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Polling response data:', data);
             
             if (data.access_token) {
               // Success! We got the access token
+              console.log('✅ Access token received successfully');
+              appendAuthMessage('✅ Authorization successful!', false);
               handleAuthenticationSuccess(data.access_token);
               return;
             }
             
             if (data.error) {
+              console.log(`Polling error: ${data.error}`);
+              
               if (data.error === 'authorization_pending') {
                 // User hasn't completed authorization yet, continue polling
+                console.log('Authorization still pending, continuing to poll...');
                 if (attempts < maxAttempts) {
                   setTimeout(poll, interval * 1000);
                 } else {
@@ -415,15 +474,22 @@
                 return;
               } else if (data.error === 'slow_down') {
                 // GitHub wants us to slow down polling
+                console.log('GitHub requested slow down, increasing interval');
                 interval = Math.min(interval + 5, 30); // Increase interval, max 30 seconds
+                appendAuthMessage('⏳ Slowing down polling as requested by GitHub...', false);
                 setTimeout(poll, interval * 1000);
                 return;
+              } else if (data.error === 'expired_token') {
+                throw new Error('Device code expired - please try again');
+              } else if (data.error === 'access_denied') {
+                throw new Error('Authorization denied - you cancelled the process');
               } else {
                 throw new Error(`GitHub OAuth error: ${data.error_description || data.error}`);
               }
             }
             
             // Unexpected response, try again
+            console.log('Unexpected response, retrying...');
             if (attempts < maxAttempts) {
               setTimeout(poll, interval * 1000);
             } else {
@@ -432,7 +498,7 @@
             
           } catch (error) {
             console.error('Error polling for access token:', error);
-            appendAuthMessage(`Authentication failed: ${error.message}`, true);
+            appendAuthMessage(`❌ Authentication failed: ${error.message}`, true);
             
             // Reset UI
             authButton.disabled = false;
@@ -440,7 +506,7 @@
           }
         };
         
-        // Start polling
+        // Start polling after the initial interval
         setTimeout(poll, interval * 1000);
       }
       
