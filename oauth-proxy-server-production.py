@@ -84,25 +84,52 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
     
     def do_OPTIONS(self):
         """Handle preflight CORS requests"""
-        self.add_cors_headers()
+        print(f"🔄 OPTIONS request for: {self.path}")
+        print(f"🔄 Origin: {self.headers.get('Origin')}")
+        
+        # Always handle OPTIONS requests locally, never forward to external APIs
         self.send_response(200)
+        self.add_cors_headers()
         self.end_headers()
     
     def add_cors_headers(self):
         """Add CORS headers to response"""
         origin = self.headers.get('Origin')
         
-        # Check if origin is allowed
-        if ALLOWED_ORIGINS == ['*'] or origin in ALLOWED_ORIGINS:
-            self.send_header('Access-Control-Allow-Origin', origin or '*')
-        elif len(ALLOWED_ORIGINS) > 0:
-            self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0])
+        print(f"🔄 Adding CORS headers for origin: {origin}")
+        
+        # Always allow the requesting origin for development/testing
+        # In production, this should be more restrictive
+        if origin:
+            # Allow common development and GitHub Pages origins
+            allowed_patterns = [
+                'localhost',
+                '127.0.0.1',
+                'github.io',
+                'azurewebsites.net',
+                'herokuapp.com',
+                'vercel.app',
+                'netlify.app'
+            ]
+            
+            # Check if the origin matches any allowed pattern or is in the configured list
+            if (ALLOWED_ORIGINS == ['*'] or 
+                origin in ALLOWED_ORIGINS or 
+                any(pattern in origin for pattern in allowed_patterns)):
+                self.send_header('Access-Control-Allow-Origin', origin)
+                print(f"✅ Allowing origin: {origin}")
+            else:
+                # Fallback to wildcard for now (can be made more restrictive later)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                print(f"⚠️ Using wildcard for origin: {origin}")
         else:
             self.send_header('Access-Control-Allow-Origin', '*')
+            print("⚠️ No origin header, using wildcard")
             
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept')
+        self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, Origin, X-Requested-With')
         self.send_header('Access-Control-Allow-Credentials', 'true')
+        self.send_header('Access-Control-Max-Age', '86400')  # Cache preflight for 24 hours
     
     def handle_root(self):
         """Handle root path"""
@@ -114,7 +141,7 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
         response = {
             "status": "ok",
             "service": "GitHub OAuth Proxy Server",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "endpoints": {
                 "health": "/health",
                 "oauth_authorize": "/oauth/authorize",
@@ -356,10 +383,13 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
             api_path = self.path.replace('/api', '', 1)
             github_url = f'https://api.github.com{api_path}'
             
+            print(f"🔄 Proxying {self.command} request to: {github_url}")
+            
             # Get authorization header
             auth_header = self.headers.get('Authorization')
             
             if not auth_header:
+                print("❌ No authorization header")
                 self.send_error_response(401, "Authorization header required")
                 return
             
@@ -375,16 +405,17 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
                 request = urllib.request.Request(github_url, headers=headers)
             elif self.command == 'POST':
                 # Read request body
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
+                content_length = int(self.headers.get('Content-Length', 0))
+                if content_length > 0:
+                    post_data = self.rfile.read(content_length)
+                else:
+                    post_data = b''
                 
                 headers['Content-Type'] = self.headers.get('Content-Type', 'application/json')
                 request = urllib.request.Request(github_url, data=post_data, headers=headers)
             else:
                 self.send_error_response(405, f"Method {self.command} not supported")
                 return
-            
-            print(f"🔄 Proxying {self.command} request to: {github_url}")
             
             # Make request to GitHub API
             try:
@@ -435,6 +466,7 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
         }
         
         self.wfile.write(json.dumps(error_response).encode())
+    
     def get_base_url(self):
         """Get the base URL of the server"""
         # In production, this should be your deployed server URL

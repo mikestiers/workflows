@@ -23,8 +23,8 @@ import base64
 
 # Configuration
 PORT = 8000
-GITHUB_CLIENT_ID = "Ov23liXhJlhD3Xei3562"  # Your GitHub OAuth App Client ID
-GITHUB_CLIENT_SECRET = "f06f6cf4d20cd8125aff7d634fd50449a62782c6"  # You'll need to set this - see instructions below
+GITHUB_CLIENT_ID = ""  # Your GitHub OAuth App Client ID
+GITHUB_CLIENT_SECRET = ""  # You'll need to set this - see instructions below
 
 # Instructions for setting up GitHub OAuth App:
 # 1. Go to https://github.com/settings/applications/new
