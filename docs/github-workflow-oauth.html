@@ -509,11 +509,12 @@
         // Start polling after the initial interval
         setTimeout(poll, interval * 1000);
       }
-      
-      /**
+        /**
        * Handle successful authentication
        */
       function handleAuthenticationSuccess(token) {
+        console.log('🎉 Authentication successful, storing token');
+        
         // Store the access token
         accessToken = token;
         localStorage.setItem('github_token', accessToken);
@@ -528,7 +529,9 @@
         const deviceContainers = authStatus.querySelectorAll('.device-code-container');
         deviceContainers.forEach(container => container.remove());
         
-        appendAuthMessage('Authentication successful! You can now trigger workflows.', false);
+        // Clear previous messages and show success
+        authStatus.innerHTML = '';
+        appendAuthMessage('🎉 Authentication successful! You can now trigger workflows.', false);
         authStatus.className = 'status-success';
         
         // Verify token permissions
@@ -912,16 +915,23 @@
           workflowStatus.innerHTML = '';
         }, 5000);
       }
-      
-      /**
+        /**
        * Append an authentication message to the auth status element
        */
       function appendAuthMessage(message, isError) {
         const messageEl = document.createElement('div');
         messageEl.textContent = message;
+        messageEl.style.padding = '5px 0';
+        messageEl.style.lineHeight = '1.4';
         
         if (isError) {
           messageEl.style.color = '#F44336';
+          messageEl.style.fontWeight = 'bold';
+        } else if (message.includes('✅') || message.includes('🎉')) {
+          messageEl.style.color = '#28a745';
+          messageEl.style.fontWeight = 'bold';
+        } else if (message.includes('🔄') || message.includes('⏳')) {
+          messageEl.style.color = '#FFC107';
         }
         
         authStatus.appendChild(messageEl);
