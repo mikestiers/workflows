@@ -794,8 +794,7 @@
           }
           
           const runData = await runResponse.json();
-          
-          // Try to get artifacts which contain the resource group data
+            // Try to get artifacts which contain the resource group data
           const artifactsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/runs/${runId}/artifacts`, {
             headers: {
               'Authorization': `token ${accessToken}`
@@ -814,7 +813,7 @@
             }
           }
           
-          // Also try to parse logs for resource group information
+          // Parse logs for resource group information (primary method since outputs may be blocked)
           const logsResponse = await fetch(`${PROXY_BASE_URL}/api/repos/${repoOwner}/${repoName}/actions/jobs/${resourceGroupJob.id}/logs`, {
             headers: {
               'Authorization': `token ${accessToken}`
@@ -824,6 +823,8 @@
           if (logsResponse.ok) {
             const logsText = await logsResponse.text();
             parseResourceGroupLogs(logsText);
+          } else {
+            appendLog('⚠️ Could not fetch workflow logs for parsing', true);
           }
           
         } catch (error) {
