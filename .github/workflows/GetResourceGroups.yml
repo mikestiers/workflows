@@ -16,9 +16,6 @@ jobs:
       resource-group-count: ${{ steps.get-rgs.outputs.resource-group-count }}
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Azure CLI Login
         uses: azure/login@v2
         with:
@@ -29,8 +26,12 @@ jobs:
         shell: bash
         run: |
           echo "🔍 Getting Azure resource groups..."
+          
           # Get resource groups in JSON format and filter to only name and location
-          RESOURCE_GROUPS_JSON=$(az group list --output json 2>/dev/null | jq --color-output false '[.[] | {name: .name, location: .location}]' || echo "[]")
+          az group list --output json > temp_rgs.json 2>/dev/null || echo "[]" > temp_rgs.json
+          
+          # Filter to only name and location using jq
+          RESOURCE_GROUPS_JSON=$(cat temp_rgs.json | jq --color-output false '[.[] | {name: .name, location: .location}]')
           
           # Check if we have any resource groups
           RG_COUNT=$(echo "$RESOURCE_GROUPS_JSON" | jq --color-output false '. | length')
@@ -50,3 +51,6 @@ jobs:
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           echo "$RESOURCE_GROUPS_JSON" | jq --color-output false '.' >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          # Clean up temporary file
+          rm -f temp_rgs.json
