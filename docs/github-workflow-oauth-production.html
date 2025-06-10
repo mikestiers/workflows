@@ -146,6 +146,28 @@
       color: #1976D2;
     }
     
+    .config-section {
+      background-color: #fff3e0;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-left: 4px solid #ff9800;
+    }
+    
+    .config-section h3 {
+      margin-top: 0;
+      color: #f57c00;
+    }
+    
+    .config-input {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    
     .hidden {
       display: none;
     }
@@ -155,11 +177,19 @@
 <body>
   <h1>GitHub Workflow with OAuth Proxy</h1>
   
+  <div class="config-section">
+    <h3>⚙️ Configuration</h3>
+    <p><strong>Backend Server URL:</strong></p>
+    <input type="text" id="proxyUrl" class="config-input" placeholder="https://your-python-server.herokuapp.com" value="">
+    <p><small>Enter the URL where your Python OAuth proxy server is deployed (e.g., Heroku, Railway, etc.)</small></p>
+    <button id="saveConfig" class="workflow-button" style="width: auto; margin: 10px 0;">Save Configuration</button>
+  </div>
+  
   <div class="proxy-info">
-    <h3>🔧 Setup Instructions</h3>
-    <p><strong>Step 1:</strong> Make sure the Python proxy server is running</p>
-    <p><strong>Step 2:</strong> Configure your GitHub OAuth App with callback URL: <code>https://github-oauth-proxy-2025.azurewebsites.net</code></p>
-    <p><strong>Step 3:</strong> Set your GitHub Client Secret in the proxy server</p>
+    <h3>🔧 Deployment Instructions</h3>
+    <p><strong>Frontend (GitHub Pages):</strong> This page is served from GitHub Pages</p>
+    <p><strong>Backend (Python Server):</strong> Deploy the Python OAuth proxy to a cloud service</p>
+    <p><strong>Recommended platforms:</strong> Heroku, Railway, Render, or any Python hosting service</p>
   </div>
 
   <div class="workflow-section">
@@ -181,18 +211,21 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Configuration
-      const PROXY_BASE_URL = 'https://github-oauth-proxy-2025.azurewebsites.net';
+      // Configuration management
+      let PROXY_BASE_URL = localStorage.getItem('proxy_base_url') || '';
       
       // GitHub repository details
       const repoOwner = 'mikestiers';
       const repoName = 'workflows';
       const workflowId = 'root.yml';
-        // Authentication state
+      
+      // Authentication state
       let accessToken = '';
       let authenticationInProgress = false;
       
       // Cache DOM elements
+      const proxyUrlInput = document.getElementById('proxyUrl');
+      const saveConfigButton = document.getElementById('saveConfig');
       const authButton = document.getElementById('auth-button');
       const logoutButton = document.getElementById('logout-button');
       const authStatus = document.getElementById('auth-status');
@@ -201,8 +234,12 @@
       const workflowStatus = document.getElementById('workflow-status');
       const workflowLogs = document.getElementById('workflow-logs');
       
+      // Initialize configuration
+      proxyUrlInput.value = PROXY_BASE_URL;
+      updateUIState();
+      
       // Restore token from localStorage if available
-      if (localStorage.getItem('github_token')) {
+      if (localStorage.getItem('github_token') && PROXY_BASE_URL) {
         accessToken = localStorage.getItem('github_token');
         authButton.textContent = 'Re-Authenticate with GitHub';
         logoutButton.style.display = 'block';
@@ -214,10 +251,43 @@
       }
       
       // Add event listeners
+      saveConfigButton.addEventListener('click', saveConfiguration);
       authButton.addEventListener('click', startAuthentication);
       logoutButton.addEventListener('click', logOut);
-      workflowButton.addEventListener('click', triggerWorkflow);      // Listen for OAuth callback messages
+      workflowButton.addEventListener('click', triggerWorkflow);
+      
+      // Listen for OAuth callback messages
       window.addEventListener('message', handleOAuthMessage);
+      
+      /**
+       * Save proxy configuration
+       */
+      function saveConfiguration() {
+        const url = proxyUrlInput.value.trim();
+        if (!url) {
+          alert('Please enter a valid proxy server URL');
+          return;
+        }
+        
+        // Remove trailing slash
+        PROXY_BASE_URL = url.replace(/\/$/, '');
+        localStorage.setItem('proxy_base_url', PROXY_BASE_URL);
+        
+        appendAuthMessage('✅ Configuration saved successfully', false);
+        updateUIState();
+      }
+      
+      /**
+       * Update UI state based on configuration
+       */
+      function updateUIState() {
+        const hasConfig = !!PROXY_BASE_URL;
+        authButton.disabled = !hasConfig;
+        
+        if (!hasConfig) {
+          appendAuthMessage('⚠️ Please configure your backend server URL first', false);
+        }
+      }
       
       /**
        * Handle OAuth callback messages from popup window
@@ -253,6 +323,11 @@
        * Start the GitHub OAuth flow via proxy
        */
       function startAuthentication() {
+        if (!PROXY_BASE_URL) {
+          appendAuthMessage('❌ Please configure your backend server URL first', true);
+          return;
+        }
+        
         // Prevent multiple clicks
         if (authButton.disabled) {
           return;
@@ -261,7 +336,8 @@
         // Clear previous status
         authStatus.innerHTML = '';
         authStatus.className = '';
-          // Update button state
+        
+        // Update button state
         authButton.disabled = true;
         authButton.textContent = 'Opening GitHub...';
         authenticationInProgress = true;
@@ -280,8 +356,11 @@
           appendAuthMessage('❌ Popup blocked! Please allow popups and try again.', true);
           authButton.disabled = false;
           authButton.textContent = 'Authenticate with GitHub';
+          authenticationInProgress = false;
           return;
-        }        appendAuthMessage('🔄 Complete authentication in the popup window...', false);
+        }
+        
+        appendAuthMessage('🔄 Complete authentication in the popup window...', false);
         
         // Check if popup was closed without completing authentication
         const checkClosed = setInterval(() => {
@@ -297,7 +376,8 @@
       
       /**
        * Handle successful authentication
-       */      function handleAuthenticationSuccess(token) {
+       */
+      function handleAuthenticationSuccess(token) {
         console.log('🎉 Authentication successful, storing token');
         
         // Clear authentication state
@@ -344,6 +424,8 @@
        * Verify that the token has the required permissions
        */
       function verifyTokenPermissions() {
+        if (!PROXY_BASE_URL) return;
+        
         // Check if the token is valid by getting user info via proxy
         fetch(`${PROXY_BASE_URL}/api/user`, {
           headers: {
@@ -411,6 +493,11 @@
         // Check if we have a token
         if (!accessToken) {
           appendLog('Error: No authentication token available', true);
+          return;
+        }
+        
+        if (!PROXY_BASE_URL) {
+          appendLog('Error: No backend server configured', true);
           return;
         }
         

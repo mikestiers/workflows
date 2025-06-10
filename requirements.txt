@@ -1,0 +1,2 @@
+# GitHub OAuth Proxy Server Requirements
+# Using only Python standard library - no external dependencies required

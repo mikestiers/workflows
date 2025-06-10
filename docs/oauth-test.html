@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth Test</title>
+</head>
+<body>
+    <h1>OAuth PostMessage Test</h1>
+    <button id="testButton">Test OAuth Popup</button>
+    <div id="messages"></div>
+    
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        
+        function addMessage(msg) {
+            const div = document.createElement('div');
+            div.textContent = new Date().toLocaleTimeString() + ': ' + msg;
+            div.style.padding = '5px';
+            div.style.borderBottom = '1px solid #ccc';
+            messagesDiv.appendChild(div);
+        }
+          // Listen for ALL messages with more debugging
+        window.addEventListener('message', function(event) {
+            console.log('MESSAGE RECEIVED:', event);
+            addMessage(`Message from ${event.origin}: ${JSON.stringify(event.data)}`);
+            
+            // Also log to console for debugging
+            console.log('Message origin:', event.origin);
+            console.log('Message data:', event.data);
+            console.log('Message source:', event.source);
+        });
+        
+        // Also try listening with a different approach
+        window.onmessage = function(event) {
+            console.log('ONMESSAGE RECEIVED:', event);
+            addMessage(`ONMESSAGE from ${event.origin}: ${JSON.stringify(event.data)}`);
+        };
+        
+        document.getElementById('testButton').addEventListener('click', function() {
+            addMessage('Opening OAuth popup...');
+            
+            const popup = window.open(
+                'http://localhost:8000/oauth/login',
+                'oauth_test',
+                'width=600,height=700'
+            );
+            
+            if (!popup) {
+                addMessage('ERROR: Popup blocked!');
+                return;
+            }
+            
+            // Check if popup closed
+            const checkClosed = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(checkClosed);
+                    addMessage('Popup was closed');
+                }
+            }, 1000);
+        });
+        
+        addMessage('Test page loaded. Click button to test OAuth flow.');
+    </script>
+</body>
+</html>

@@ -96,7 +96,6 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
         try:
             parsed_path = urllib.parse.urlparse(self.path)
             query_params = urllib.parse.parse_qs(parsed_path.query)
-            
             code = query_params.get('code', [None])[0]
             state = query_params.get('state', [None])[0]
             error = query_params.get('error', [None])[0]
@@ -104,7 +103,8 @@ class OAuthProxyHandler(http.server.SimpleHTTPRequestHandler):
             if error:
                 self.send_html_response(f"""
                     <html><body>
-                        <h1>OAuth Error</h1>                        <p>Error: {error}</p>
+                        <h1>OAuth Error</h1>
+                        <p>Error: {error}</p>
                         <p>Description: {query_params.get('error_description', [''])[0]}</p>
                         <script>window.close();</script>
                     </body></html>
