@@ -857,8 +857,7 @@
             const artifactsData = await artifactsResponse.json();
             const resourceGroupArtifact = artifactsData.artifacts.find(artifact => 
               artifact.name.includes('azure-resource-groups')
-            );
-              if (resourceGroupArtifact) {
+            );            if (resourceGroupArtifact) {
               appendLog(`📦 Found resource group artifact: ${resourceGroupArtifact.name}`);
               displayResourceGroupArtifactInfo(resourceGroupArtifact);
               
@@ -866,13 +865,9 @@
               appendLog('✅ Complete resource group data is available in the artifact above');
               appendLog('💡 Artifact contains both JSON and text format data');
               
-              // Create a mock display to show that data is available
-              const mockDisplayData = [{
-                name: 'Resource groups available in artifact',
-                location: 'Download from link above',
-                state: 'Data available'
-              }];
-              displayResourceGroupResults(mockDisplayData, 1, null);
+              // Skip log parsing since we have artifacts - return early
+              appendLog('🎯 Resource group data successfully located in artifacts');
+              return;
             } else {
               appendLog('⚠️ No resource group artifacts found');
             }
@@ -991,8 +986,7 @@
               });
             }
             
-            parseResourceGroupLogs(logsText);
-          } else {
+            parseResourceGroupLogs(logsText);          } else {
             appendLog('❌ Could not access workflow logs from any endpoint', true);
             appendLog('💡 This might be due to one of the following reasons:');
             appendLog('   • Token needs "actions:read" permission scope');
@@ -1002,13 +996,8 @@
             appendLog('📦 Alternative: Resource group data is available in workflow artifacts');
             appendLog('🔗 You can download the artifacts from the GitHub Actions page');
             
-            // Show a helpful message in the UI even if we can't parse logs
-            const mockResourceGroups = [{
-              name: 'Unable to fetch logs',
-              location: 'Check artifacts',
-              state: 'Permission denied'
-            }];
-            displayResourceGroupResults(mockResourceGroups, 0, null);
+            // Don't show a mock display here - let the user know to check artifacts instead
+            appendLog('💡 If artifacts are available above, the complete data can be found there');
           }
           
         } catch (error) {
