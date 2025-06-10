@@ -274,17 +274,17 @@
         try {
           appendAuthMessage('Requesting device authorization from GitHub...', false);
           
-          // Request a device code from GitHub
+          // Request a device code from GitHub using form-encoded data to avoid CORS preflight
+          const formData = new URLSearchParams();
+          formData.append('client_id', clientId);
+          formData.append('scope', 'workflow');
+          
           const response = await fetch('https://github.com/login/device/code', {
             method: 'POST',
             headers: {
               'Accept': 'application/json',
-              'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              client_id: clientId,
-              scope: 'workflow'
-            })
+            body: formData
           });
           
           if (!response.ok) {
@@ -374,22 +374,22 @@
       async function pollForAccessToken(deviceCode, interval) {
         const maxAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
         let attempts = 0;
-        
-        const poll = async () => {
+          const poll = async () => {
           try {
             attempts++;
+            
+            // Use form-encoded data to avoid CORS preflight
+            const formData = new URLSearchParams();
+            formData.append('client_id', clientId);
+            formData.append('device_code', deviceCode);
+            formData.append('grant_type', 'urn:ietf:params:oauth:grant-type:device_code');
             
             const response = await fetch('https://github.com/login/oauth/access_token', {
               method: 'POST',
               headers: {
                 'Accept': 'application/json',
-                'Content-Type': 'application/json',
               },
-              body: JSON.stringify({
-                client_id: clientId,
-                device_code: deviceCode,
-                grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
-              })
+              body: formData
             });
             
             if (!response.ok) {
